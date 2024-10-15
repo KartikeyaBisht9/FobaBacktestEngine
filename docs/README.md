@@ -1,7 +1,28 @@
 # FobaBacktestEngine
 
+**FobaBacktestEngine** is a high-performance, Numba-powered backtesting engine designed for processing full order book and market-by-order (MBO) data - originally developed for HKEX. The engine supports a variety of configurations, allowing users to analyze and simulate market behavior in various modes. The 3 modes implemented thusfar include **Training**, **Simulation**, and **PassiveAnalysis**. 
 
-**FobaBacktestEngine** is a high-performance, Numba-powered backtesting engine designed for processing full order book and market-by-order (MBO) data - originally developed for HKEX. The engine supports a variety of configurations, allowing users to analyze and simulate market behavior in various modes. The 3 modes implemented thusfar include **Training**, **Simulation**, and **PassiveAnalysis**.
+
+**General Structure**
+The engine returns an ImmutableDict which maps symbolCode --> results (typically dataframes) and as such we use an enrichment framework.
+
+Enrichment
+    - a very high level class that comprises of the following:
+    - *processors* - these are callables (e.g. func) that operate on data/args etc and make their results available to other processors
+    - *configs* - these are non processor specific arguments
+    - *enrichers* - an object that returns an ImmutableDict of securityCode --> result after processors have sequentially operated on inputs w/ the correct configs
+    
+
+
+
+
+
+
+
+
+
+
+
 
 ---
 
@@ -54,6 +75,16 @@ The analysis extends to identifying behavioral patterns among market participant
 
 The **FobaBacktestEngine** offers extensive customization options, allowing users to configure the specific fields to be recorded during simulations, such as order placement, trade execution, and market depth. These configurations allow for detailed assessment and analysis of strategy performance under various market conditions.
 
+
+---
+---
+## BreakPoint Simulation
+
+The orderBook we maintain internally can be displayed for the researcher to look at how feeatures are developing, how orders are arriving etc:
+1. researcher inputs a startTime & endTime in nanoseconds
+2. researcher inputs a json that maps {field : plotType} ... e.g. we can plot rws_skew as a timeseries if we want to see how this feature behaves or we can visualize our position.
+
+A react based server will launch where the user can simulate the orderBook etc using a scroll wheel
 
 ---
 
