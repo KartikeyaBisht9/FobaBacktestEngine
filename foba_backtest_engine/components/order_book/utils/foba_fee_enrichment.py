@@ -7,7 +7,7 @@ from foba_backtest_engine.enrichment import provides, enriches
 
 @provides('static_data_enrichment')
 @enriches('foba_events')
-def static_data_enrichment(foba_events, static_data_info, excluded_fee_names=(), currency_rate=1):
+def static_data_enrichment(foba_events, static_data_info, excluded_fee_names=("Stock Full Stamp", "Stock Full Stamp - CBBC hedge"), currency_rate=1):
     """
     Provides an ImmutableDict of StaticDataEnrichment (see named tuple defn) which are used for FobaEvent enrichment
     :param foba_events: ImmutableDict of FobaEvents which will be enriched.

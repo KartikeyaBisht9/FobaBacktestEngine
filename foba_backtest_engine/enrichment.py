@@ -194,9 +194,12 @@ class Enrichment:
                 for resource in processor.resource_names:
                     provided.remove(resource)
             else:
+                # required_args = set(parameter.name for parameter in processor._requires.values()
+                #                     if parameter.default is Parameter.empty
+                #                     and parameter.name is not 'kwargs')
                 required_args = set(parameter.name for parameter in processor._requires.values()
                                     if parameter.default is Parameter.empty
-                                    and parameter.name is not 'kwargs')
+                                    and parameter.name != 'kwargs')
                 provided.update(processor._provides)
                 if not provided.issuperset(required_args):
                     raise ValueError('Processor {} does not have required resource {}. Check whether providing process ' \

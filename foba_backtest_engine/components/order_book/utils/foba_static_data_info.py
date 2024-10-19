@@ -19,9 +19,9 @@ def static_data_info(product_filter=None):
     """
     Provides an ImmutableDict of StaticDataInfo
     """
-    feeInfo = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/ExchangeRules/FeeInfo.feather")
-    tickSchedule = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/ExchangeRules/TickSchedule.feather")
-    feeSchedule = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/ExchangeRules/FeeSchedule.feather")
+    feeInfo = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/FeeInfo.feather")
+    tickSchedule = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/TickSchedule.feather")
+    feeSchedule = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/FeeSchedule.feather")
 
     books = []
     for _, row in feeInfo.iterrows():

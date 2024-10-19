@@ -12,7 +12,7 @@ import boto3
 import pandas as pd
 from botocore.exceptions import ClientError
 
-OPTIVER_BUCKET_NAME = 'optiverd1'
+OPTIVER_BUCKET_NAME = 'hkexsampledata'
 
 
 @dataclass(frozen=True)
@@ -229,8 +229,6 @@ Currently
 """
 
 OPTIVER_BUCKET_DETAILS = S3Details(
-    key = 'AKIA3C6FMFZQO3PCO447',                               
-    secret_key = '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',    
     endpoint = "https://s3.ap-southeast-2.amazonaws.com",
     dashboard_url='',
     region_name = 'ap-southeast-2',

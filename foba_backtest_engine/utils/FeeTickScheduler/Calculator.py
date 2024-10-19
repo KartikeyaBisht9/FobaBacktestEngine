@@ -36,17 +36,10 @@ def _calculate_fee(book_info, event, excluded_fee_names=()):
     for rule in book_info.fee_rules:
         if rule.name in excluded_fee_names:
             continue
-    
-        #TODO : need to see what fees optiver is paying and fix this
-        # rule_conditions = [condition for condition in book_info.fee_rule_conditions
-        #                    if condition.fee_rule_id == rule.fee_rule_id] 
-        # if not _apply_fee_rule(rule_conditions, event):
-        #     continue
-
         if rule.charged_unit == 'VOLUME':
             fee = event.event_volume * rule.cost
         elif rule.charged_unit == 'MARKET_VALUE':
-            fee = event.event_volume * book_info.contract_size * event.event_price * rule.cost / 10000
+            fee = (event.event_volume * book_info.contract_size * event.event_price * rule.cost) / 10000
         elif rule.charged_unit == 'TRADE':
             fee = rule.cost
         else:

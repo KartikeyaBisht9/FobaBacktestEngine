@@ -1,4 +1,4 @@
-from foba_backtest_engine.components.order_book.utils.foba_own_orders import order_numbers_filtered, order_state_creates, manual_orders, order_matches, order_pick_offs, order_deletes, get_filled_hit_entries, hit_entry_enrichment_omdc, performance_classification
+from foba_backtest_engine.components.order_book.utils.foba_own_orders import order_numbers_filtered, order_state_creates, order_matches, order_deletes, order_delete_matches, get_optiver_trades,optiver_trade_and_quotes
 from foba_backtest_engine.components.order_book.utils.foba_competitor_broker_queue import omdc_order_number_to_broker_number, competitor_enrichment, foreign_counterparty_enrichment, broker_orders_enrichment
 from foba_backtest_engine.components.order_book.utils.foba_feedstates import fetch_feed_stats_from_book_builders, full_feed_state_enrichment, feed_states_at_join
 from foba_backtest_engine.components.order_book.utils.foba_time import TimeProfile, MinSentTime, MaxSentTime,AverageSentTime,omdc_profile, send_times
@@ -152,6 +152,8 @@ class Engine:
         bbov_weights=self.config.get("bbov_weights",[1,6,6,1])
         smooth_bbov_alpha=self.config.get("smooth_bbov_alpha",0.10)
         bbov_interval_s=self.config.get("bbov_interval_s", 10)
+        excluded_fee_names=self.config.get("excluded_fee_names", ["Stock Full Stamp", "Stock Full Stamp - CBBC hedge"])
+        broker_mapping_backup = self.config.get("broker_mapping_backup", True)
 
 
         start_time, end_time = start_end_time(time_zone=time_zone,
@@ -193,7 +195,9 @@ class Engine:
             s3_persist=self.s3_persist,
             s3_path=self.s3_path,
             s3_persister=self.s3_persister,
-            format="parquet"
+            format="parquet",
+            excluded_fee_names=excluded_fee_names,
+            brokermap_backup = broker_mapping_backup,
         )
 
         return configuration
@@ -211,37 +215,6 @@ class Engine:
 
     def _get_simulation_processors(self, configuration):
         processors = list()
-        """
-        1) Gets the FobaEvents & FeedStates
-        """
-        processors.append(pybuilders)           
-        processors.append(configure(extract_foba_events,
-                                    exclude_pulls=configuration['exclude_pulls'],
-                                    include_only_optiver_pulls=configuration['include_only_optiver_pulls'],
-                                    exclude_inplace_updates=configuration['exclude_inplace_updates']))
-        processors.append(static_data_info)
-        processors.append(static_data_enrichment)
-        processors.append(fetch_feed_stats_from_book_builders)
-        processors.append(full_feed_state_enrichment)
-        processors.append(category_enrichment)
-        processors.append(derived_enrichment)
-        """
-        2) Applies OMDC broker queue tagging (passive tagging only)
-        """
-        processors.append(send_times)
-        processors.append(omdc_broker_number_to_name)
-        processors.append(omdc_broker_queue)
-        processors.append(omdc_order_number_to_broker_number)
-        processors.append(competitor_enrichment)
-        processors.append(foreign_counterparty_enrichment)
-        processors.append(broker_orders_enrichment)
-        """
-        3) Valuation processors
-        """
-        # 1) need a processor that creates the "smart_skew" | "smart_party_passive_position" | "support_abn_priority" | "resistance_abn_priority"
-        # 2) need a processor that calculates various different features
-        # 3) need a relative value creator = this uses midspot dataframe for HSI/HHI & A-shares & correct timestamping logic to create these features
-        # 4) need a target annotator
 
         return processors
     
@@ -251,58 +224,13 @@ class Engine:
             configuration,
             enrich_competitor=True
             ):
-        """
-        1. order_numbers_filtered   -- gets all of our own orderIds 
-        2. pybuilders               -- uses ADD | MODIFY | DELETE & CLEAR orders to generate & build the orderBook
-        3. extract_foba_events      -- extracts out FobaEvent objects ... these will make the row of our analysed df & are enriched by other processors
-        4. static_data_info         -- we initialize static information like tickSize, fees etc
-        5. static_data_enrichment   -- we enrich the FobaEvents with fees (HKD)
-        6. order_state_creates      -- gets all the orders we created
-        7. manual_orders            -- gets all of our manual orders
-        
-        Important for SELF analysis ...
-        8.  order_matches           -- we create OptiverOrderMatch objects
-        9.  order_deletes           -- we create OptiverOrderDelete objects
-        10. order_pick_offs         -- we create OptiverPickOffs objects
-        11. get_filled_hit_entires  -- all hit attempts that are filled
-        12. hit_entry_enrichment    -- we create OptiverHits objects
-        13. performance_classification  -- we create OptiverPerformance objects
-
-        Now associated to EACH fobe_event (FobaEvent) we have various objects (namedtuple type) that give us self analysis metrics like performance_classification etc
-
-        14. send_times              -- use w2w and one way delays to calculate max and average send time for orders
-        15. 
-
-        """
         processors = list()
 
         processors.append(order_numbers_filtered)
-        processors.append(pybuilders)           
-        processors.append(configure(extract_foba_events,
-                                    exclude_pulls=configuration['exclude_pulls'],
-                                    include_only_optiver_pulls=configuration['include_only_optiver_pulls'],
-                                    exclude_inplace_updates=configuration['exclude_inplace_updates']))
+        processors.append(pybuilders)
+        processors.append(configure(extract_foba_events,exclude_pulls=configuration['exclude_pulls'],include_only_optiver_pulls=configuration['include_only_optiver_pulls'],exclude_inplace_updates=configuration['exclude_inplace_updates']))
         processors.append(static_data_info)
         processors.append(static_data_enrichment)
-
-        # TODO: The processors below require calibration w/ optiver data
-        """
-        order_numbers_filtered  ||  manual_orders   ||  order_matches   ||  order_pulls   ||  order_pick_offs  ||  order_pick_offs  ||  filled_hits   ||  hit_entry  ||  missed_quote_reason
-
-        What are they doing?
-            - order_state_creates & manual_orders just fetch all orders that optiver was involved in
-            - order_matches, deletes, pick_offs, filled_hit_entry & hit_enrichment create respective objects for EACH event_id in foba_events
-            - these events have information about whether the event was an optiver order, if it was a delete, if we were picked off etc
-        """
-        processors.append(order_state_creates)
-        processors.append(manual_orders)
-
-        processors.append(order_matches)
-        processors.append(order_deletes)
-        processors.append(order_pick_offs)
-        processors.append(get_filled_hit_entries)
-        processors.append(hit_entry_enrichment_omdc)
-        processors.append(performance_classification)
         
         processors.append(send_times)
 
@@ -310,16 +238,25 @@ class Engine:
         processors.append(annotate_slippages)
         processors.append(full_feed_state_enrichment)
         processors.append(feed_states_at_join)
+        
+        processors.append(order_state_creates)
+        processors.append(order_matches)
+        processors.append(order_deletes)
+        processors.append(order_delete_matches)
+        
+        if enrich_competitor:
+            processors.append(omdc_broker_number_to_name)
+            
+        processors.append(get_optiver_trades)
+        processors.append(optiver_trade_and_quotes)
 
         processors.append(category_enrichment)
         processors.append(derived_enrichment)
-        processors.append(enrich_pnl)
+        # processors.append(enrich_pnl)
 
         processors.append(event_enricher)
 
         if enrich_competitor:
-            processors.append(optiver_trades)
-            processors.append(omdc_broker_number_to_name)
             processors.append(omdc_broker_queue)
             processors.append(omdc_order_number_to_broker_number)
             processors.append(competitor_enrichment)

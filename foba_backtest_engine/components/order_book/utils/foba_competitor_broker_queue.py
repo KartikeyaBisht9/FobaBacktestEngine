@@ -377,155 +377,131 @@ def omdc_order_number_to_broker_number(pybuilders, book_ids, omdc_broker_queue):
 ================================================================================================
 
 COMPETITOR ENRICHMENT  
-    (1) ... we expand order_number : brokerId mapping to include information from our own orders + trades
-    (2) ... every PASSIVE order now gets a brokerId assigned
-
-Process
-    i) We store a dictionary of Optiver's order_num : broker_num using OptiverTrades, OptiverHitEntry, OptiverOrderMatches
-        - OptiverTrades = this is all of optiver's trades (these are trades we received AcK for)
-        - OptiverHitEntry = these are all the add orders Optiver sends (whether it trades or not is reflected)
-        - OptiverOrderMatch
+    Optiver trades
+        - this contains every trade we have been a part of with a tag whether we hit or quoted (optiver_hit)
+        - the optiverBrokerId_ is the driver/id of optiver 
+        - the counterpartyId_ is the party we traded against = for optiver_hit = False, this is who hit us
     
-    ii) Matching Hit Entries
-        
-        We loop over each Foba event that we are enriching:
-            - We check if the foba event is linked to a hit enrichment 
-                - if it is ... we try and fetch the trade associated with this AddOrder in the OptiverTrades
-                - thus we get a list of potential trades
-            
-            - Now if thie potential_trades list is NOT empty
-                - The "matching" trade is the one where the received_ timestamp (from exchange) is CLOSEST to the internal OptiverSendTime
-
-            - If the potential_trades list is empty .. assign broker_number as -1
-            - So from these we can get the aggressor Id
-
-    iii) Matching trades
-
-        If the event type is a trade (non-hit enriched) we find the associated internal order matches
-        from these mathces we find the best one (same as matching hit entries) - from this we can extract the aggressor Id
-
-    iii) Re-match
-        - We expand the order_number to broker_number we generated using Competitor matcher by also including
-         Optiver's trades and using this information we enrich the broker_number further
+    Our FobaEvents only record the passive-order-id so we can match this to our own quote fills and find the aggressor who hit us exactly.
+    
+    So given our own quote fills we need to do the following
+    1) Create broker-number fields
+        - we use our exact quote-fills to match orderId w/ us
+        - for the rest we use the brokerQueue fuzzy match
+    
+    2) Create foreign_counterparty fields
+        - for our own quote fills ... we can exactly match this
+        - for our HIT trades ... we first narrow our search window in time
+            ... we then look for the correct side & find trades where notional-traded alings
+             - we then choose the one closest to the exchange-timestamp
+    
 
 """
 
-@provides('competitor_enrichment')
+@provides('passive_enrichment')
 @enriches('foba_events')
 def competitor_enrichment(foba_events, order_num_to_broker_num, broker_number_to_broker_name,
-                          order_matches=None, hit_entry_enrichment=None, optiver_trades=None):
-
-    optiver_ordernumber_to_brokernumber = {}
-
-    if optiver_trades and hit_entry_enrichment and order_matches:
-        trades_dict = multi_dict(optiver_trades.values(), key=lambda x: (x.book_, x.orderId_, abs(x.price_)))
-        for event_id, event in foba_events.items():
-            if hit_entry_enrichment[event_id].optiver_hit:
-                potential_trades = trades_dict[(event.book_id,
-                                                    event.aggressor_order_number,
-                                                    event.event_price * event.event_volume)]
-                if len(potential_trades) > 0:
-                    p_received = [p.received_ for p in potential_trades]
-                    index = p_received.index(min(p_received, key=lambda x: abs(x - event.event_driver_received)))
-                    broker_number = int(potential_trades[index].foreign_counterParty_)
-                    del potential_trades[index]
+                          order_matches=None, optiver_trades=None):
+    
+    optiver_order_to_broker = {}
+    if optiver_hit_or_quote:
+        optiver_quotes = multi_dict([x for x in optiver_trades.values() if x.optiver_hit == False], key=lambda x: (x.bookId_, x.orderId_, abs(x.price * x.volume)))
+        
+        for event_id, event in foba_event.items():
+            bookId, order_number, notional = event.book_id, event.order_number, abs(event.event_price * event.event_volume)
+            opti_trades = optiver_quotes[(bookId, order_number, notional)]
+            if len(opti_trades) > 0:
+                received = [t.received_ for t in opti_trades]
+                index = received.index(min(received, key = lambda x : abs(x-event.event_driver_received)))
+                broker = int(opti_trades[index].optiverBrokerId_)
+            else:
+                broker = -1
+            
+            if event.book_id not in optiver_order_to_broker:
+                optiver_order_to_broker[event.book_id] = {}
+            
+            optiver_order_to_broker[event.book_id][order_number] = broker
+        
+    improved_order_number_to_broker = dict(order_num_to_broker_num)
+    for k,v in improved_order_number_to_broker.items():
+        for on, bn in v.item():
+            if on in optiver_order_to_broker:
+                new_bn = optiver_order_to_broker[on]
+                if new_bn == -1:
+                    improved_order_number_to_broker[on] = bn
                 else:
-                    broker_number = -1
-
-                if event.book_id not in optiver_ordernumber_to_brokernumber:
-                    optiver_ordernumber_to_brokernumber[event.book_id] = {}
-
-                optiver_ordernumber_to_brokernumber[event.book_id][event.order_number] = broker_number
-
-            elif event.event_type is EventType.TRADE and order_matches[event_id].optiver_order:
-                potential_trades = trades_dict[(event.book_id,
-                                                    event.order_number,
-                                                    event.event_price * event.event_volume)]
-                if len(potential_trades) > 0:
-                    p_received = [p.received_ for p in potential_trades]
-                    index = p_received.index(min(p_received, key=lambda x: abs(x - event.event_driver_received)))
-                    broker_number = int(potential_trades[index].foreign_submittingBrokerId_)
-                    del potential_trades[index]
-                else:
-                    broker_number = 1400    #default optiver broker number
-
-                if event.book_id not in optiver_ordernumber_to_brokernumber:
-                    optiver_ordernumber_to_brokernumber[event.book_id] = {}
-
-                optiver_ordernumber_to_brokernumber[event.book_id][event.order_number] = broker_number
-
-    improved_order_num_to_broker_num = dict(order_num_to_broker_num)
-    for k, v in optiver_ordernumber_to_brokernumber.items():
-        for on, bn in v.items():
-            improved_order_num_to_broker_num[k][on] = bn
-
+                    improved_order_number_to_broker[on] = new_bn
     def items():
         for event_id, event in foba_events.items():
-            broker_number = improved_order_num_to_broker_num[event.book_id][event.order_number]
+            broker_number = improved_order_number_to_broker[event.book_id][event.order_number]
             if broker_number > 0:
                 if broker_number in broker_number_to_broker_name:
                     broker_name = broker_number_to_broker_name[broker_number]
                 else:
                     broker_name = str(broker_number)
             else:
-                broker_name = 'UNKNOWN'
-            yield event_id, ImmutableRecord(broker_number=broker_number,
-                                            broker_name=broker_name)
-
+                broker_name = "UNKNOWN"
+            yield event_id, ImmutableRecord(broker_number=broker_number, broker_name=broker_name)
     return ImmutableDict(items())
-
-
+    
+    
 
 """
 ================================================================================================
 COUNTERPARTY ENRICHMENT
-    ... this is to annotate the aggressor brokerId using our own trades (passive + aggressive)
+    ... As described above this section does:
 
-For each event in FobaEvents:
-    - we see if the event is a TRADE where we were the passive counterparty
-        i) we extract our own trade that matches this event (using price, volume and a time tolerance)
-        ii) we then use the foreign counterparty given to us over private feed to annotate the aggressorId
+    Create foreign_counterparty fields
+        - for our own quote fills ... we can exactly match this
+        - for our HIT trades ... we first narrow our search window in time
+            ... we then look for the correct side & find trades where notional-traded alings
+             - we then choose the one closest to the exchange-timestamp
     
-    - if the event is a TRADE where we were the aggressor ... we repeat the process above but we know exactly which session (brokerId) we used
+    
 """
 
 
-@provides('foreign_counterparty_enrichment')
+@provides('aggressive_enrichment')
 @enriches('foba_events')
-def foreign_counterparty_enrichment(foba_events, order_matches, optiver_trades, broker_number_to_broker_name,
-                                    hit_entry_enrichment):
-    trades_dict = multi_dict(optiver_trades.values(), key=lambda x: (x.book_, x.orderId_, abs(x.price_)))
-
+def foreign_counterparty_enrichment(foba_events, order_matches, optiver_trades, broker_number_to_broker_name):
     aggressor_map = {}
+    
+    if optiver_hit_or_quote:
+        optiver_quotes = multi_dict([x for x in optiver_trades.values() if x.optiver_hit == False], key=lambda x: (x.bookId_, x.orderId_, abs(x.price * x.volume)))
+        
+        optiver_hits = multi_dict([x for x in optiver_trades.values() if x.optiver_hit == True], key=lambda x: (x.bookId_, abs(x.price * x.volume)))
+        
+        
     for event_id, event in foba_events.items():
-        if event.event_type is EventType.TRADE and order_matches[event_id].optiver_order:
-            potential_trades = trades_dict[(event.book_id,
-                                            event.order_number,
-                                            event.event_price * event.event_volume)]
-            if len(potential_trades) > 0:
-                p_received = [p.received_ for p in potential_trades]
-                index = p_received.index(min(p_received, key=lambda x: abs(x - event.event_driver_received)))
-                broker_number = int(potential_trades[index].foreign_counterParty_)
-                del potential_trades[index]
-                aggressor_map[(event.book_id, event.aggressor_order_number)] = broker_number
-        elif event.event_type is EventType.TRADE and hit_entry_enrichment[event_id].optiver_hit:
-
-            potential_trades = trades_dict[(event.book_id,
-                                            event.aggressor_order_number,
-                                            event.event_price * event.event_volume)]
-            if len(potential_trades) > 0:
-                p_received = [p.received_ for p in potential_trades]
-                index = p_received.index(min(p_received, key=lambda x: abs(x - event.event_driver_received)))
-                broker_number = int(potential_trades[index].foreign_submittingBrokerId_)
-                del potential_trades[index]
-                aggressor_map[(event.book_id, event.aggressor_order_number)] = broker_number
-            else:
-                aggressor_map[(event.book_id, event.aggressor_order_number)] = 1453
+        if event.event_type is EvenType.TRADE:
+            key = (event.book_id, event.order_number, abs(event.event_price * event.event_volume))
+            fuzzy_key = (event.book_id, abs(event.event_price * event.event_volume))
+            if key in optiver_quotes:
+                quote_fills = optiver_quotes[key]
+                if len(quote_fills) > 0:
+                    received = [t.received_ for t in quote_fills]
+                    index = received.index(min(received, key = lambda x : abs(x-event.event_driver_received)))
+                    counterparty = int(quote_fills[index].counterpartyId_)
+                    aggressor_map[event_id] = counterparty    
+            
+            if fuzzy_key in optiver_hits:
+                hit_fulls = optiver_hits[fuzzy_key]
+                if len(hit_fulls) > 0:
+                    received = [t.received_ for t in hit_fulls]
+                    index = received.index(min(received, key = lambda x : abs(x-event.event_driver_received)))
+                    counterparty = int(hit_fulls[index].optiverBrokerId_)
+                    if event_id in aggressor_map:
+                        pass
+                    else:
+                        aggressor_map[event_id] = counterparty
+                else:
+                    if event_id not in aggressor_map:
+                        aggressor_map[event_id] = 1400
 
     def items():
         for event_id, event in foba_events.items():
-            if (event.book_id, event.aggressor_order_number) in aggressor_map:
-                broker_number = aggressor_map[(event.book_id, event.aggressor_order_number)]
+            if event_id in aggressor_map:
+                broker_number = aggressor_map[event_id]
                 broker_name = broker_number_to_broker_name[broker_number] \
                     if broker_number in broker_number_to_broker_name else str(broker_number)
             else:
@@ -534,7 +510,6 @@ def foreign_counterparty_enrichment(foba_events, order_matches, optiver_trades, 
             yield event_id, ImmutableRecord(foreign_counterparty=broker_name,
                                             foreign_counterparty_number=broker_number)
     return ImmutableDict(items())
-
 
 
 """
@@ -555,12 +530,12 @@ This uses the foba_events as well as competitor enrichment to do the following:
 
 @provides('broker_orders_enrichment')
 @enriches('foba_events')
-def broker_orders_enrichment(foba_events, competitor_enrichment):
+def broker_orders_enrichment(foba_events, passive_enrichment):
 
     def items():
         for level_broker_events in multi_dict(foba_events.items(),
                                               key=lambda item: (item[1].level_id,
-                                                                competitor_enrichment[item[0]].broker_number)
+                                                                passive_enrichment[item[0]].broker_number)
                                               ).values():
 
             orders = set()

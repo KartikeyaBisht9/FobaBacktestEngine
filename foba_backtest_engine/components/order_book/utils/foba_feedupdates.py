@@ -1,6 +1,7 @@
-from collections import namedtuple
-from foba_backtest_engine.components.order_book.utils import enums
+from foba_backtest_engine.components.order_book.utils.foba_own_orders import get_FAK_orders, get_competitor_FAKS
 from foba_backtest_engine.data.S3.S3OptiverResearchActions import OPTIVER_BUCKET_ACTIONS
+from foba_backtest_engine.components.order_book.utils import enums
+from collections import namedtuple
 import numpy as np
 import pandas as pd
 
@@ -71,7 +72,8 @@ def db_to_feed_update(row, exchange):
         price=row['price_'],
         volume=row['volume_'],
         inferred=row['end_'],
-        aggressor_order_number=row['aggressorOrderId_'],
+        # aggressor_order_number=competitor_FAKs[row["orderId_"]] if row["orderId_"] in competitor_FAKs else None,
+        aggressor_order_number = np.nan,
         sequence_number=row['sequenceNumber_'],
     )
 
@@ -91,8 +93,6 @@ def get_feed_updates(exchange, filter=None):
 
     dataframes = []
     for data_type in list(table_class_map.keys()):
-        # Note ... this assumes S3 stores data in the format ..
-        #       exchange/OrderType/date.feather
         if exchange == enums.Exchange.OMDC:
             exchangeStr = "OMDC"
         else:

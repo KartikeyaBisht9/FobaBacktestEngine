@@ -69,7 +69,7 @@ def extract_foba_events(
             volume_ahead_at_join=event.volume_ahead_at_join,
             level_cumulative_joined_volume_at_join=event.rank_at_join,
             count_ahead_at_join=event.count_ahead_at_join,
-            event_type=EventType.TRADE if event.type == EventType.TRADE else (EventType.INPLACE_UPDATE if event.type == EventType.INPLACE_UPDATE else EventType.DELETE),
+            event_type=EventType.TRADE if event.type == EventType.TRADE else (EventType.INPLACE_UPDATE if event.type == EventType.INPLACE_UPDATE else EventType.PULL),
             event_exchange_timestamp=event.trade_timestamp,
             event_driver_received=event.trade_received,
             event_driver_created=event.trade_created,

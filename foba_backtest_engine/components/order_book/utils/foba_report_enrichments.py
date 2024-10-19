@@ -1,4 +1,4 @@
-from foba_backtest_engine.components.order_book.utils.enums import EventType
+from foba_backtest_engine.components.order_book.utils.enums import EventType, Side
 from collections import defaultdict
 import pandas as pd
 import numpy as np
@@ -220,8 +220,44 @@ def enrich_buckets(foba):
     
     return foba
 
+def pnl_enrichment(foba, pnl_slippages=[5,15,30,60,120,240,300,600,900,1800,3600,7200]):
+    foba = foba.sort_values("createdNanos_").reset_index(drop = True)
+    end_prices = foba.groupby(['date', 'product_symbol'])[['event_price']].last().to_dict()['event_price']
 
-def enrich_foba(foba):
+    def get_end_price(date, symbol):
+        return end_prices[(date, symbol)]
+
+    foba['currency_rate'] = foba['turnover'] / (foba['event_volume'] * foba['event_price'])
+    foba['eod_price'] = foba[['date', 'product_symbol']].apply(lambda x: get_end_price(x['date'], x['product_symbol']), axis=1)
+
+    for time in pnl_slippages:
+        foba[f"passive_pnl_{time}s"] = np.where(foba.event_type==EventType.TRADE,
+                    np.where(foba.side==Side.BID, 
+                                (foba[f"midspot_{time}"]-foba.event_price)*(foba.event_volume*foba.contract_size),
+                                    (foba.event_price-foba[f"midspot_{time}"])*(foba.event_volume*foba.contract_size))-foba.fees, 0)
+        foba[f"aggressive_pnl_{time}s"] = np.where(foba.event_type==EventType.TRADE,
+                    -1*np.where(foba.side==Side.BID, 
+                                (foba[f"midspot_{time}"]-foba.event_price)*(foba.event_volume*foba.contract_size),
+                                    (foba.event_price-foba[f"midspot_{time}"])*(trafobade_data.event_volume*foba.contract_size))-foba.fees, 0)
+        foba[f"aggressive_bps_{time}s"] = 10000*(foba[f"aggressive_pnl_{time}s"]/(foba["event_volume"]*foba["event_price"]))
+        foba[f"passive_bps_{time}s"] = 10000*(foba[f"passive_pnl_{time}s"]/(foba["event_volume"]*foba["event_price"]))
+
+        foba[f"aggressive_tick_{time}s"] = (foba[f"aggressive_pnl_{time}s"]/(foba["event_volume"])/foba["tick_size"])
+        foba[f"passive_tick_{time}s"] = (foba[f"passive_pnl_{time}s"]/(foba["event_volume"])/foba["tick_size"])
+
+    foba['slipped_pnl_eod'] = np.where(foba['side'] == Side.BID, 
+                                            (foba['eod_price'] - foba['event_price']) * foba['event_volume'] * foba['currency_rate'] - foba['fees'], 
+                                            (foba['event_price'] - foba['eod_price']) * foba['event_volume'] * foba['currency_rate'] - foba['fees'])
+    foba['aggressor_slipped_pnl_eod'] = np.where(foba['side'] == Side.BID, 
+                                                    (foba['event_price'] - foba['eod_price']) * foba['event_volume'] * foba['currency_rate'] - foba['fees'], 
+                                                    (foba['eod_price'] - foba['event_price']) * foba['event_volume'] * foba['currency_rate'] - foba['fees'])
+    pnl_fields = [f"passive_pnl_{x}s" for x in pnl_slippages] + \
+                [f"aggressive_pnl_{x}s" for x in pnl_slippages] + ["slipped_pnl_eod", "aggressor_slipped_pnl_eod"]
+    currency_rate = 0.195
+    foba[pnl_fields] = foba[pnl_fields] * currency_rate
+
+
+def enrich_foba(foba, pnl_slippages=[5,15,30,60,120,240,300,600,900,1800,3600,7200]):
     foba = quoting_priority_enrichments(foba)
     foba = time_enrichments(foba)
     foba = enrich_level_metrics(foba)
@@ -229,6 +265,7 @@ def enrich_foba(foba):
     foba = enrich_counterparty(foba)
     foba = credit_and_pnl_enrichment(foba)
     foba = enrich_buckets(foba)
+    foba = pnl_enrichment(foba, pnl_slippages=pnl_slippages)
     return foba
 
 

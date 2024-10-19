@@ -48,6 +48,7 @@ class OmdcBookBuilder:
         self.persist_order_queue = True
         self.bid_order_queue = OrderQueue(bid_side=True)
         self.ask_order_queue = OrderQueue(bid_side=False)
+        self.passive_to_aggressor = {}
 
         self.trades = []
         self.pulls = []
@@ -72,6 +73,10 @@ class OmdcBookBuilder:
         is_multi_trade_end = message.inferred == 1 and len(self.event_trades) > 0
 
         if message.command == enums.Command.ADD:
+            
+            
+            
+            
             self.update_add(message, order_manager, level_manager, is_multi_trade_end)
         elif message.command == enums.Command.DELETE:
             self.update_delete(message, order_manager, level_manager, is_trade)

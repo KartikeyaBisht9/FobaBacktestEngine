@@ -1,55 +1,55 @@
 import arrow
 import datetime
 from datetime import timedelta as Timedelta
-import pandas_market_calendars as mcal
+# import pandas_market_calendars as mcal
 
 NANOS_IN_SECOND = int(1e9)
 MILLIS_IN_SECOND = int(1e3)
 
-hkex = mcal.get_calendar('HKEX')
-szse = mcal.get_calendar('SSE')
+# hkex = mcal.get_calendar('HKEX')
+# szse = mcal.get_calendar('SSE')
 
-def business_day_range(start_date, end_date, type = 'datetime'):
-    if type == 'datetime':
-        return [c.to_pydatetime().date() for c in hkex.valid_days(start_date=start_date, end_date=end_date)]
-    elif type == 'timestamp':
-        return [c.timestamp() for c in hkex.valid_days(start_date=start_date, end_date=end_date)]
-    else:
-        return hkex.valid_days(start_date=start_date, end_date=end_date)
+# def business_day_range(start_date, end_date, type = 'datetime'):
+#     if type == 'datetime':
+#         return [c.to_pydatetime().date() for c in hkex.valid_days(start_date=start_date, end_date=end_date)]
+#     elif type == 'timestamp':
+#         return [c.timestamp() for c in hkex.valid_days(start_date=start_date, end_date=end_date)]
+#     else:
+#         return hkex.valid_days(start_date=start_date, end_date=end_date)
 
-def get_previous_business_day(date=datetime.date.today(), type = 'datetime'):
-    if type == 'datetime':
-        return hkex.previous_close(date).to_pydatetime().date()
-    elif type == 'timestamp':
-        return hkex.previous_close(date).timestamp()
-    else:
-        return hkex.previous_close(date)
+# def get_previous_business_day(date=datetime.date.today(), type = 'datetime'):
+#     if type == 'datetime':
+#         return hkex.previous_close(date).to_pydatetime().date()
+#     elif type == 'timestamp':
+#         return hkex.previous_close(date).timestamp()
+#     else:
+#         return hkex.previous_close(date)
 
-def get_previous_business_day_szse(date=datetime.date.today(), type = 'datetime'):
-    if type == 'datetime':
-        return szse.previous_close(date).to_pydatetime().date()
-    elif type == 'timestamp':
-        return szse.previous_close(date).timestamp()
-    else:
-        return szse.previous_close(date)
+# def get_previous_business_day_szse(date=datetime.date.today(), type = 'datetime'):
+#     if type == 'datetime':
+#         return szse.previous_close(date).to_pydatetime().date()
+#     elif type == 'timestamp':
+#         return szse.previous_close(date).timestamp()
+#     else:
+#         return szse.previous_close(date)
 
 
-def get_previous_china_and_hk_business_day(date):
-    test_dates = sorted(business_day_range(start_date=date-Timedelta(days = 20), end_date=date))
-    condition = False
-    found_date = None
-    while not condition:
-        test_date = test_dates[-1]
-        prev_hk = get_previous_business_day(test_date)
-        prev_szse = get_previous_business_day_szse(test_date)
-        if len(test_dates) == 0:
-            raise ValueError('No previous business day found')
-        if prev_hk == prev_szse:
-            condition = True
-            found_date = prev_hk
-        else:
-            test_dates.pop()
-    return found_date
+# def get_previous_china_and_hk_business_day(date):
+#     test_dates = sorted(business_day_range(start_date=date-Timedelta(days = 20), end_date=date))
+#     condition = False
+#     found_date = None
+#     while not condition:
+#         test_date = test_dates[-1]
+#         prev_hk = get_previous_business_day(test_date)
+#         prev_szse = get_previous_business_day_szse(test_date)
+#         if len(test_dates) == 0:
+#             raise ValueError('No previous business day found')
+#         if prev_hk == prev_szse:
+#             condition = True
+#             found_date = prev_hk
+#         else:
+#             test_dates.pop()
+#     return found_date
 
 def start_end_time(start_hour, 
                    start_minute, 
