@@ -230,6 +230,8 @@ Currently
 
 OPTIVER_BUCKET_DETAILS = S3Details(
     endpoint = "https://s3.ap-southeast-2.amazonaws.com",
+    key='',
+    secret_key='',
     dashboard_url='',
     region_name = 'ap-southeast-2',
 )

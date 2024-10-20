@@ -4,6 +4,7 @@ from foba_backtest_engine.utils.time_utils import to_milli_timestamp
 from foba_backtest_engine.utils.base_utils import ImmutableDict
 from foba_backtest_engine.enrichment import provides
 from collections import namedtuple
+import pandas as pd
 
 """
 Expected BrokerQueue (for OMDC only)
@@ -46,7 +47,8 @@ OmdcBrokerQueue = namedtuple('OmdcBrokerQueue', (
 def get_omdc_broker_queue(filter, security_codes):
     start_time, end_time, date_to_pull, date_filter = to_milli_timestamp(filter.start_time) * 1e6, to_milli_timestamp(
         filter.end_time) * 1e6, filter.start_time.format('YYYY-MM-DD'), int(filter.start_time.format('YYYYMMDD'))
-    omdc = OPTIVER_BUCKET_ACTIONS.get_feather(path = f'OMDC/ConflatedBrokerQueue/{date_to_pull}.feather')
+    omdc = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/OMDC.feather")
+    # omdc = OPTIVER_BUCKET_ACTIONS.get_feather(path = f'OMDC/ConflatedBrokerQueue/{date_to_pull}.feather')
     omdc["securityCode_"] = omdc["securityCode_"].apply(lambda x:str(x) if isinstance(x, int) else x)
     omdc = omdc[omdc['securityCode_'].isin(security_codes)]
     omdc_filter = omdc[omdc["date_id"]==date_filter].reset_index(drop = True)

@@ -400,14 +400,13 @@ COMPETITOR ENRICHMENT
 
 @provides('passive_enrichment')
 @enriches('foba_events')
-def competitor_enrichment(foba_events, order_num_to_broker_num, broker_number_to_broker_name,
-                          order_matches=None, optiver_trades=None):
+def competitor_enrichment(foba_events, order_num_to_broker_num, broker_number_to_broker_name, optiver_trades):
     
     optiver_order_to_broker = {}
-    if optiver_hit_or_quote:
+    if optiver_trades:
         optiver_quotes = multi_dict([x for x in optiver_trades.values() if x.optiver_hit == False], key=lambda x: (x.bookId_, x.orderId_, abs(x.price * x.volume)))
         
-        for event_id, event in foba_event.items():
+        for event_id, event in foba_events.items():
             bookId, order_number, notional = event.book_id, event.order_number, abs(event.event_price * event.event_volume)
             opti_trades = optiver_quotes[(bookId, order_number, notional)]
             if len(opti_trades) > 0:
@@ -424,7 +423,7 @@ def competitor_enrichment(foba_events, order_num_to_broker_num, broker_number_to
         
     improved_order_number_to_broker = dict(order_num_to_broker_num)
     for k,v in improved_order_number_to_broker.items():
-        for on, bn in v.item():
+        for on, bn in v.items():
             if on in optiver_order_to_broker:
                 new_bn = optiver_order_to_broker[on]
                 if new_bn == -1:
@@ -460,43 +459,21 @@ COUNTERPARTY ENRICHMENT
     
 """
 
-
 @provides('aggressive_enrichment')
 @enriches('foba_events')
-def foreign_counterparty_enrichment(foba_events, order_matches, optiver_trades, broker_number_to_broker_name):
+def foreign_counterparty_enrichment(foba_events, optiver_hit_or_quote, broker_number_to_broker_name):
     aggressor_map = {}
     
-    if optiver_hit_or_quote:
-        optiver_quotes = multi_dict([x for x in optiver_trades.values() if x.optiver_hit == False], key=lambda x: (x.bookId_, x.orderId_, abs(x.price * x.volume)))
-        
-        optiver_hits = multi_dict([x for x in optiver_trades.values() if x.optiver_hit == True], key=lambda x: (x.bookId_, abs(x.price * x.volume)))
-        
-        
     for event_id, event in foba_events.items():
-        if event.event_type is EvenType.TRADE:
-            key = (event.book_id, event.order_number, abs(event.event_price * event.event_volume))
-            fuzzy_key = (event.book_id, abs(event.event_price * event.event_volume))
-            if key in optiver_quotes:
-                quote_fills = optiver_quotes[key]
-                if len(quote_fills) > 0:
-                    received = [t.received_ for t in quote_fills]
-                    index = received.index(min(received, key = lambda x : abs(x-event.event_driver_received)))
-                    counterparty = int(quote_fills[index].counterpartyId_)
-                    aggressor_map[event_id] = counterparty    
-            
-            if fuzzy_key in optiver_hits:
-                hit_fulls = optiver_hits[fuzzy_key]
-                if len(hit_fulls) > 0:
-                    received = [t.received_ for t in hit_fulls]
-                    index = received.index(min(received, key = lambda x : abs(x-event.event_driver_received)))
-                    counterparty = int(hit_fulls[index].optiverBrokerId_)
-                    if event_id in aggressor_map:
-                        pass
-                    else:
-                        aggressor_map[event_id] = counterparty
+        if event.event_type is EventType.TRADE:
+            optiver_trade = optiver_hit_or_quote[event_id]
+            if optiver_trade.optiver_trade:
+                if optiver_trade.optiver_hit:
+                    aggressor_map[event_id] = optiver_trade.optiver_broker_id
                 else:
-                    if event_id not in aggressor_map:
-                        aggressor_map[event_id] = 1400
+                    aggressor_map[event_id] = optiver_trade.counterparty_broker_code
+            else:
+                pass
 
     def items():
         for event_id, event in foba_events.items():

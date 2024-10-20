@@ -98,8 +98,20 @@ def get_feed_updates(exchange, filter=None):
         else:
             raise ValueError(f"Exchange not supported {exchange}")
 
-        S3path = f"{exchangeStr}/{table_map[data_type]}/{str(filter.start_time.date())}.feather"
-        df = OPTIVER_BUCKET_ACTIONS.get_feather(path=S3path)
+        # S3path = f"{exchangeStr}/{table_map[data_type]}/{str(filter.start_time.date())}.feather"
+        # df = OPTIVER_BUCKET_ACTIONS.get_feather(path=S3path)
+        if data_type == "add_order":
+            df = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/add.feather")
+        elif data_type =="update_order":
+            df = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/update.feather")
+        elif data_type == "delete_order":
+            df = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/delete.feather")
+        elif data_type == "clear_book":
+            df = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/clear.feather")
+        else:
+            raise ValueError("wtf")
+
+
         df=df[df["securityCode_"].isin(filter.book_ids)].reset_index(drop = True)
         df["securityCode_"] = df["securityCode_"].apply(lambda x: str(x))
         table_code = table_class_map[data_type]

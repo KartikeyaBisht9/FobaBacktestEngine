@@ -206,6 +206,12 @@ class LevelManager:
         num_empty = num - len(prices)
 
         return list(zip(prices, volumes)) + [(None, None)] * num_empty
+    
+    def get_orders_on_non_empty_levels(self, num):
+        prices = list(itertools.islice(self.ordered_prices, 0, num))
+        orders = [self.open_levels[p].orders for p in prices]
+
+        return list(zip(prices, orders))
 
     def get_non_empty_levels(self, num):
         prices = list(itertools.islice(self.ordered_prices, 0, num))

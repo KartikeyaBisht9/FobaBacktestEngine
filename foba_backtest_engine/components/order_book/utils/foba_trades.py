@@ -1,5 +1,4 @@
 from foba_backtest_engine.components.order_book.utils import apply_mapping as apply_mapping
-from foba_backtest_engine.data.S3.S3OptiverResearchActions import OPTIVER_BUCKET_ACTIONS
 from foba_backtest_engine.components.order_book.utils import MyRow as MyRow
 from foba_backtest_engine.components.order_book.utils.enums import Side
 from foba_backtest_engine.utils.time_utils import to_milli_timestamp

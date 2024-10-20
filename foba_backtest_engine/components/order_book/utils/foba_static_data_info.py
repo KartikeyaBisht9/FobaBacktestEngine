@@ -3,6 +3,7 @@ from foba_backtest_engine.utils.FeeTickScheduler.StaticDataInfo import StaticDat
 from foba_backtest_engine.data.S3.S3OptiverResearchActions import OPTIVER_BUCKET_ACTIONS
 from foba_backtest_engine.components.order_book.utils import MyRow
 from foba_backtest_engine.enrichment import provides
+import pandas as pd
 
 from operator import attrgetter
 
@@ -19,9 +20,14 @@ def static_data_info(product_filter=None):
     """
     Provides an ImmutableDict of StaticDataInfo
     """
-    feeInfo = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/FeeInfo.feather")
-    tickSchedule = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/TickSchedule.feather")
-    feeSchedule = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/FeeSchedule.feather")
+    # feeInfo = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/FeeInfo.feather")
+    # tickSchedule = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/TickSchedule.feather")
+    # feeSchedule = OPTIVER_BUCKET_ACTIONS.get_feather("StaticData/FeeSchedule.feather")
+
+    feeInfo = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/FeeInfo.feather")
+    tickSchedule = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/TickSchedule.feather")
+    feeSchedule = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/FeeSchedule.feather")
+
 
     books = []
     for _, row in feeInfo.iterrows():

@@ -220,7 +220,7 @@ def enrich_buckets(foba):
     
     return foba
 
-def pnl_enrichment(foba, pnl_slippages=[5,15,30,60,120,240,300,600,900,1800,3600,7200]):
+def pnl_enrichment(foba, currency_rate = 0.195, pnl_slippages=[5,15,30,60,120,240,300,600,900,1800,3600,7200]):
     foba = foba.sort_values("createdNanos_").reset_index(drop = True)
     end_prices = foba.groupby(['date', 'product_symbol'])[['event_price']].last().to_dict()['event_price']
 
@@ -238,7 +238,7 @@ def pnl_enrichment(foba, pnl_slippages=[5,15,30,60,120,240,300,600,900,1800,3600
         foba[f"aggressive_pnl_{time}s"] = np.where(foba.event_type==EventType.TRADE,
                     -1*np.where(foba.side==Side.BID, 
                                 (foba[f"midspot_{time}"]-foba.event_price)*(foba.event_volume*foba.contract_size),
-                                    (foba.event_price-foba[f"midspot_{time}"])*(trafobade_data.event_volume*foba.contract_size))-foba.fees, 0)
+                                    (foba.event_price-foba[f"midspot_{time}"])*(foba.event_volume*foba.contract_size))-foba.fees, 0)
         foba[f"aggressive_bps_{time}s"] = 10000*(foba[f"aggressive_pnl_{time}s"]/(foba["event_volume"]*foba["event_price"]))
         foba[f"passive_bps_{time}s"] = 10000*(foba[f"passive_pnl_{time}s"]/(foba["event_volume"]*foba["event_price"]))
 
@@ -255,9 +255,10 @@ def pnl_enrichment(foba, pnl_slippages=[5,15,30,60,120,240,300,600,900,1800,3600
                 [f"aggressive_pnl_{x}s" for x in pnl_slippages] + ["slipped_pnl_eod", "aggressor_slipped_pnl_eod"]
     currency_rate = 0.195
     foba[pnl_fields] = foba[pnl_fields] * currency_rate
+    return foba
 
 
-def enrich_foba(foba, pnl_slippages=[5,15,30,60,120,240,300,600,900,1800,3600,7200]):
+def enrich_foba(foba, currency_rate=0.195, pnl_slippages=[5,15,30,60,120,240,300,600,900,1800,3600,7200]):
     foba = quoting_priority_enrichments(foba)
     foba = time_enrichments(foba)
     foba = enrich_level_metrics(foba)
@@ -265,7 +266,7 @@ def enrich_foba(foba, pnl_slippages=[5,15,30,60,120,240,300,600,900,1800,3600,72
     foba = enrich_counterparty(foba)
     foba = credit_and_pnl_enrichment(foba)
     foba = enrich_buckets(foba)
-    foba = pnl_enrichment(foba, pnl_slippages=pnl_slippages)
+    foba = pnl_enrichment(foba, currency_rate=currency_rate, pnl_slippages=pnl_slippages)
     return foba
 
 

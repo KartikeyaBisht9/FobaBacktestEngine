@@ -14,7 +14,9 @@ We download this and parse the csv - returning the broker number : name as a imm
 
 def get_hk_broker_data_from_backup():
     path = "OMDC/Backup/BrokerMapping.parquet"
-    df = OPTIVER_BUCKET_ACTIONS.get_parquet(path=path)
+    # df = OPTIVER_BUCKET_ACTIONS.get_parquet(path=path)
+    df = pd.read_parquet("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/BrokerMapping.parquet")
+    
 
     unique_participants = df['Participant Name'].unique()
 
