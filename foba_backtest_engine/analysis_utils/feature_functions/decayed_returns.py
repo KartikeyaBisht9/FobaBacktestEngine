@@ -1,6 +1,11 @@
-from foba_backtest_engine.analysis_utils.calc_utils.decayed_sum_module import decayed_sum
-from numpy import ndarray, dtype, int64, float64,log2, errstate
-from typing import Any, Literal, TypeVar, cast
+from typing import Any
+
+from numpy import dtype, float64, int64, log2, ndarray
+
+from foba_backtest_engine.analysis_utils.calc_utils.decayed_sum_module import (
+    decayed_sum,
+)
+
 
 # Decayed Returns
 def decayed_returns(

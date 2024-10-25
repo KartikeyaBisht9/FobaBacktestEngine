@@ -1,12 +1,12 @@
-from foba_backtest_engine.utils.base_utils import ImmutableDict, multi_dict, ImmutableRecord
-from foba_backtest_engine.components.order_book.utils.enums import EventType
-from foba_backtest_engine.enrichment import provides, enriches
 from collections import defaultdict
-from urllib.error import URLError
-import pandas as pd
-import urllib
-import csv
-import io
+
+from foba_backtest_engine.components.order_book.utils.enums import EventType
+from foba_backtest_engine.enrichment import enriches, provides
+from foba_backtest_engine.utils.base_utils import (
+    ImmutableDict,
+    ImmutableRecord,
+    multi_dict,
+)
 
 """
 ---------------------
@@ -87,11 +87,14 @@ Matching Algorithm
 TIME_ALLOWANCE_NANOS = 1e9  # allow 1 second
 EPSILON = 1e-4
 
+
 class CompetitorMatcher:
     def __init__(self, bid_order_queue, ask_order_queue):
         self.bid_order_queue = bid_order_queue
         self.ask_order_queue = ask_order_queue
-        self.matched_results = defaultdict(int)  # defaultdict (key, value) = (order_number, broker_number)
+        self.matched_results = defaultdict(
+            int
+        )  # defaultdict (key, value) = (order_number, broker_number)
         self.last_idx_bid = 0
         self.last_idx_ask = 0
 
@@ -128,46 +131,63 @@ class CompetitorMatcher:
         self.total_count += 1
 
         while process_bid or process_ask:
-            if self.last_idx_bid < len(self.bid_order_queue) and self.bid_order_queue[self.last_idx_bid][0] < snapshot[
-                0] - TIME_ALLOWANCE_NANOS:
+            if (
+                self.last_idx_bid < len(self.bid_order_queue)
+                and self.bid_order_queue[self.last_idx_bid][0]
+                < snapshot[0] - TIME_ALLOWANCE_NANOS
+            ):
                 bid_before_curr_bq_idx = self.last_idx_bid
 
-            if self.last_idx_ask < len(self.ask_order_queue) and self.ask_order_queue[self.last_idx_ask][0] < snapshot[
-                0] - TIME_ALLOWANCE_NANOS:
+            if (
+                self.last_idx_ask < len(self.ask_order_queue)
+                and self.ask_order_queue[self.last_idx_ask][0]
+                < snapshot[0] - TIME_ALLOWANCE_NANOS
+            ):
                 ask_before_curr_bq_idx = self.last_idx_ask
 
-            if self.last_idx_bid >= len(self.bid_order_queue) or self.bid_order_queue[self.last_idx_bid][0] > snapshot[
-                0] + TIME_ALLOWANCE_NANOS:
+            if (
+                self.last_idx_bid >= len(self.bid_order_queue)
+                or self.bid_order_queue[self.last_idx_bid][0]
+                > snapshot[0] + TIME_ALLOWANCE_NANOS
+            ):
                 process_bid = False
-            if self.last_idx_ask >= len(self.ask_order_queue) or self.ask_order_queue[self.last_idx_ask][0] > snapshot[
-                0] + TIME_ALLOWANCE_NANOS:
+            if (
+                self.last_idx_ask >= len(self.ask_order_queue)
+                or self.ask_order_queue[self.last_idx_ask][0]
+                > snapshot[0] + TIME_ALLOWANCE_NANOS
+            ):
                 process_ask = False
 
             if process_bid:
-                if self._sufficient_number_of_orders(num_orders_bq_snapshot_bid,
-                                                     self.bid_order_queue[self.last_idx_bid],
-                                                     self.candidate_order_queue_bid,
-                                                     self.candidate_timestamps_bid,
-                                                     True):
+                if self._sufficient_number_of_orders(
+                    num_orders_bq_snapshot_bid,
+                    self.bid_order_queue[self.last_idx_bid],
+                    self.candidate_order_queue_bid,
+                    self.candidate_timestamps_bid,
+                    True,
+                ):
                     candidate_idx_bid.append(self.last_idx_bid)
                 else:
                     pass
                 self.last_idx_bid += 1
 
             if process_ask:
-                if self._sufficient_number_of_orders(num_orders_bq_snapshot_ask,
-                                                     self.ask_order_queue[self.last_idx_ask],
-                                                     self.candidate_order_queue_ask,
-                                                     self.candidate_timestamps_ask,
-                                                     False):
+                if self._sufficient_number_of_orders(
+                    num_orders_bq_snapshot_ask,
+                    self.ask_order_queue[self.last_idx_ask],
+                    self.candidate_order_queue_ask,
+                    self.candidate_timestamps_ask,
+                    False,
+                ):
                     candidate_idx_ask.append(self.last_idx_ask)
                 else:
                     pass
                 self.last_idx_ask += 1
 
         if self.candidate_timestamps_ask and self.candidate_timestamps_bid:
-            bid_idx, ask_idx = self._most_suitable_candidate(num_orders_bq_snapshot_bid,
-                                                             num_orders_bq_snapshot_ask)
+            bid_idx, ask_idx = self._most_suitable_candidate(
+                num_orders_bq_snapshot_bid, num_orders_bq_snapshot_ask
+            )
             self.match(self.candidate_order_queue_bid[bid_idx], snapshot[1])
             self.match(self.candidate_order_queue_ask[ask_idx], snapshot[2])
 
@@ -195,17 +215,22 @@ class CompetitorMatcher:
             return
 
     def match(self, orders_per_level_order_queue, brokers_per_level_broker_queue):
-        for (curr_level_orders, curr_level_brokers) in zip(orders_per_level_order_queue,
-                                                           brokers_per_level_broker_queue):
-            for (i, broker) in enumerate(curr_level_brokers):
-                self.matched_results[curr_level_orders[i]] = broker  # Take the latest information by default
+        for curr_level_orders, curr_level_brokers in zip(
+            orders_per_level_order_queue, brokers_per_level_broker_queue
+        ):
+            for i, broker in enumerate(curr_level_brokers):
+                self.matched_results[curr_level_orders[i]] = (
+                    broker  # Take the latest information by default
+                )
 
-    def _sufficient_number_of_orders(self, 
-                                     num_of_orders_bq_snapshot, 
-                                     order_queue_input, 
-                                     candidate_order_queue,
-                                     timestamps,
-                                     bid_side):
+    def _sufficient_number_of_orders(
+        self,
+        num_of_orders_bq_snapshot,
+        order_queue_input,
+        candidate_order_queue,
+        timestamps,
+        bid_side,
+    ):
         order_queue = fill_levels(order_queue_input[1], bid_side)
         num_of_orders_order_queue = [len(entry) for entry in order_queue]
         if len(num_of_orders_order_queue) < len(num_of_orders_bq_snapshot):
@@ -220,13 +245,19 @@ class CompetitorMatcher:
     def _most_suitable_candidate(self, orders_bq_snapshot_bid, orders_bq_snapshot_ask):
         bid_idx = []
         if orders_bq_snapshot_bid:
-            bid_idx = [idx for (idx, entry) in enumerate(self.candidate_order_queue_bid) if
-                       len(entry[0]) == orders_bq_snapshot_bid[0]]
+            bid_idx = [
+                idx
+                for (idx, entry) in enumerate(self.candidate_order_queue_bid)
+                if len(entry[0]) == orders_bq_snapshot_bid[0]
+            ]
 
         ask_idx = []
         if orders_bq_snapshot_ask:
-            ask_idx = [idx for (idx, entry) in enumerate(self.candidate_order_queue_ask) if
-                       len(entry[0]) == orders_bq_snapshot_ask[0]]
+            ask_idx = [
+                idx
+                for (idx, entry) in enumerate(self.candidate_order_queue_ask)
+                if len(entry[0]) == orders_bq_snapshot_ask[0]
+            ]
 
         if bid_idx and ask_idx:
             # In the case where both bid & ask idx exist ... take the side w/ smaller order number (more certain)
@@ -279,31 +310,38 @@ class CompetitorMatcher:
             return bid_idx_final, ask_idx_final
 
         # if no exact match found in bid or ask, just use the last from each side (this logic is fuzzy)
-        return len(self.candidate_order_queue_bid) - 1, len(self.candidate_order_queue_ask) - 1
+        return len(self.candidate_order_queue_bid) - 1, len(
+            self.candidate_order_queue_ask
+        ) - 1
+
 
 """
 Note HKEX does not allow a nicely scrapable table ... this must be manually adjusted if exchange changes tickSchedule
 """
+
+
 def next_tick(price, bid_side=False):
-    TICK_SIZES = [(0.25, 0.001),
-                  (0.5, 0.005),
-                  (10, 0.01),
-                  (20, 0.02),
-                  (100, 0.05),
-                  (200, 0.1),
-                  (500, 0.5),
-                  (1000, 0.5),
-                  (2000, 1),
-                  (5000, 2),
-                  (10000, 5)]
+    TICK_SIZES = [
+        (0.25, 0.001),
+        (0.5, 0.005),
+        (10, 0.01),
+        (20, 0.02),
+        (100, 0.05),
+        (200, 0.1),
+        (500, 0.5),
+        (1000, 0.5),
+        (2000, 1),
+        (5000, 2),
+        (10000, 5),
+    ]
 
     if bid_side:
-        for (upper_bound, tick_size) in TICK_SIZES:
+        for upper_bound, tick_size in TICK_SIZES:
             if price <= upper_bound:
                 return price - tick_size
         return price - TICK_SIZES[-1][1]
     else:
-        for (upper_bound, tick_size) in TICK_SIZES:
+        for upper_bound, tick_size in TICK_SIZES:
             if price < upper_bound:
                 return price + tick_size
         return price + TICK_SIZES[-1][1]
@@ -317,13 +355,15 @@ def add_broker(side_broker_list, curr_level, curr_broker_number):
         side_broker_list.append([])
     side_broker_list[curr_level].append(curr_broker_number)
 
+
 def fill_levels(order_queue, bid_side):
     result = []
     idx = 0
-    next_price = -1 if bid_side else float('inf')
+    next_price = -1 if bid_side else float("inf")
     while idx < len(order_queue):
         if (next_price - order_queue[idx][0] > EPSILON and bid_side) or (
-                EPSILON < order_queue[idx][0] - next_price and not bid_side):
+            EPSILON < order_queue[idx][0] - next_price and not bid_side
+        ):
             result.append([])
             next_price = next_tick(next_price, bid_side)
             continue
@@ -332,6 +372,7 @@ def fill_levels(order_queue, bid_side):
             next_price = next_tick(order_queue[idx][0], bid_side)
             idx += 1
     return result
+
 
 def parse_broker_queue_new(broker_queue_sorted):
     all_results = []
@@ -344,27 +385,34 @@ def parse_broker_queue_new(broker_queue_sorted):
             curr_timestamp_nanos = snapshot.timestampNanos_
             if snapshot.side_ == 1:
                 curr_result = (
-                    snapshot.timestampNanos_, [[snapshot.brokerNumber_]],
-                    [])  # (timestamp, bid_brokers, ask_brokers)
+                    snapshot.timestampNanos_,
+                    [[snapshot.brokerNumber_]],
+                    [],
+                )  # (timestamp, bid_brokers, ask_brokers)
             else:
                 curr_result = (
-                    snapshot.timestampNanos_, [],
-                    [[snapshot.brokerNumber_]])  # (timestamp, bid_brokers, ask_brokers)
+                    snapshot.timestampNanos_,
+                    [],
+                    [[snapshot.brokerNumber_]],
+                )  # (timestamp, bid_brokers, ask_brokers)
         elif snapshot.timestampNanos_ == curr_timestamp_nanos:
-            add_broker(curr_result[snapshot.side_], snapshot.level_, snapshot.brokerNumber_)
+            add_broker(
+                curr_result[snapshot.side_], snapshot.level_, snapshot.brokerNumber_
+            )
         else:
-            raise ValueError('seems the data are not sorted properly')
+            raise ValueError("seems the data are not sorted properly")
     return all_results
 
-@provides('order_num_to_broker_num')
+
+@provides("order_num_to_broker_num")
 def omdc_order_number_to_broker_number(pybuilders, book_ids, omdc_broker_queue):
     def items():
         for book, builder in pybuilders.items():
-
             if book not in [str(x) if isinstance(x, int) else x for x in book_ids]:
                 continue
-            competitor_matcher = CompetitorMatcher(builder.bid_order_queue.order_queue,
-                                                   builder.ask_order_queue.order_queue)
+            competitor_matcher = CompetitorMatcher(
+                builder.bid_order_queue.order_queue, builder.ask_order_queue.order_queue
+            )
             curr_broker_queue = parse_broker_queue_new(omdc_broker_queue[book])
             for snapshot in curr_broker_queue:
                 competitor_matcher.match_snapshot(snapshot)
@@ -398,31 +446,42 @@ COMPETITOR ENRICHMENT
 
 """
 
-@provides('passive_enrichment')
-@enriches('foba_events')
-def competitor_enrichment(foba_events, order_num_to_broker_num, broker_number_to_broker_name, optiver_trades):
-    
+
+@provides("passive_enrichment")
+@enriches("foba_events")
+def competitor_enrichment(
+    foba_events, order_num_to_broker_num, broker_number_to_broker_name, optiver_trades
+):
     optiver_order_to_broker = {}
     if optiver_trades:
-        optiver_quotes = multi_dict([x for x in optiver_trades.values() if x.optiver_hit == False], key=lambda x: (x.bookId_, x.orderId_, abs(x.price * x.volume)))
-        
+        optiver_quotes = multi_dict(
+            [x for x in optiver_trades.values() if x.optiver_hit == False],
+            key=lambda x: (x.bookId_, x.orderId_, abs(x.price * x.volume)),
+        )
+
         for event_id, event in foba_events.items():
-            bookId, order_number, notional = event.book_id, event.order_number, abs(event.event_price * event.event_volume)
+            bookId, order_number, notional = (
+                event.book_id,
+                event.order_number,
+                abs(event.event_price * event.event_volume),
+            )
             opti_trades = optiver_quotes[(bookId, order_number, notional)]
             if len(opti_trades) > 0:
                 received = [t.received_ for t in opti_trades]
-                index = received.index(min(received, key = lambda x : abs(x-event.event_driver_received)))
+                index = received.index(
+                    min(received, key=lambda x: abs(x - event.event_driver_received))
+                )
                 broker = int(opti_trades[index].optiverBrokerId_)
             else:
                 broker = -1
-            
+
             if event.book_id not in optiver_order_to_broker:
                 optiver_order_to_broker[event.book_id] = {}
-            
+
             optiver_order_to_broker[event.book_id][order_number] = broker
-        
+
     improved_order_number_to_broker = dict(order_num_to_broker_num)
-    for k,v in improved_order_number_to_broker.items():
+    for k, v in improved_order_number_to_broker.items():
         for on, bn in v.items():
             if on in optiver_order_to_broker:
                 new_bn = optiver_order_to_broker[on]
@@ -430,9 +489,12 @@ def competitor_enrichment(foba_events, order_num_to_broker_num, broker_number_to
                     improved_order_number_to_broker[on] = bn
                 else:
                     improved_order_number_to_broker[on] = new_bn
+
     def items():
         for event_id, event in foba_events.items():
-            broker_number = improved_order_number_to_broker[event.book_id][event.order_number]
+            broker_number = improved_order_number_to_broker[event.book_id][
+                event.order_number
+            ]
             if broker_number > 0:
                 if broker_number in broker_number_to_broker_name:
                     broker_name = broker_number_to_broker_name[broker_number]
@@ -440,10 +502,13 @@ def competitor_enrichment(foba_events, order_num_to_broker_num, broker_number_to
                     broker_name = str(broker_number)
             else:
                 broker_name = "UNKNOWN"
-            yield event_id, ImmutableRecord(broker_number=broker_number, broker_name=broker_name)
+            yield (
+                event_id,
+                ImmutableRecord(broker_number=broker_number, broker_name=broker_name),
+            )
+
     return ImmutableDict(items())
-    
-    
+
 
 """
 ================================================================================================
@@ -459,11 +524,14 @@ COUNTERPARTY ENRICHMENT
     
 """
 
-@provides('aggressive_enrichment')
-@enriches('foba_events')
-def foreign_counterparty_enrichment(foba_events, optiver_hit_or_quote, broker_number_to_broker_name):
+
+@provides("aggressive_enrichment")
+@enriches("foba_events")
+def foreign_counterparty_enrichment(
+    foba_events, optiver_hit_or_quote, broker_number_to_broker_name
+):
     aggressor_map = {}
-    
+
     for event_id, event in foba_events.items():
         if event.event_type is EventType.TRADE:
             optiver_trade = optiver_hit_or_quote[event_id]
@@ -479,13 +547,22 @@ def foreign_counterparty_enrichment(foba_events, optiver_hit_or_quote, broker_nu
         for event_id, event in foba_events.items():
             if event_id in aggressor_map:
                 broker_number = aggressor_map[event_id]
-                broker_name = broker_number_to_broker_name[broker_number] \
-                    if broker_number in broker_number_to_broker_name else str(broker_number)
+                broker_name = (
+                    broker_number_to_broker_name[broker_number]
+                    if broker_number in broker_number_to_broker_name
+                    else str(broker_number)
+                )
             else:
                 broker_number = -1
-                broker_name = 'UNKNOWN'
-            yield event_id, ImmutableRecord(foreign_counterparty=broker_name,
-                                            foreign_counterparty_number=broker_number)
+                broker_name = "UNKNOWN"
+            yield (
+                event_id,
+                ImmutableRecord(
+                    foreign_counterparty=broker_name,
+                    foreign_counterparty_number=broker_number,
+                ),
+            )
+
     return ImmutableDict(items())
 
 
@@ -505,38 +582,58 @@ This uses the foba_events as well as competitor enrichment to do the following:
 """
 
 
-@provides('broker_orders_enrichment')
-@enriches('foba_events')
+@provides("broker_orders_enrichment")
+@enriches("foba_events")
 def broker_orders_enrichment(foba_events, passive_enrichment):
-
     def items():
-        for level_broker_events in multi_dict(foba_events.items(),
-                                              key=lambda item: (item[1].level_id,
-                                                                passive_enrichment[item[0]].broker_number)
-                                              ).values():
-
+        for level_broker_events in multi_dict(
+            foba_events.items(),
+            key=lambda item: (
+                item[1].level_id,
+                passive_enrichment[item[0]].broker_number,
+            ),
+        ).values():
             orders = set()
             for order_id in {event.order_number for _, event in level_broker_events}:
-                orders.add((
-                    order_id,
-                    min([event.join_driver_created
-                         for _, event in level_broker_events if event.order_number == order_id]),
-                    max([event.event_driver_created
-                         for _, event in level_broker_events if event.order_number == order_id])
-                ))
+                orders.add(
+                    (
+                        order_id,
+                        min(
+                            [
+                                event.join_driver_created
+                                for _, event in level_broker_events
+                                if event.order_number == order_id
+                            ]
+                        ),
+                        max(
+                            [
+                                event.event_driver_created
+                                for _, event in level_broker_events
+                                if event.order_number == order_id
+                            ]
+                        ),
+                    )
+                )
 
-            times = [event.join_driver_created for _, event in level_broker_events] + \
-                    [event.event_driver_created for _, event in level_broker_events]
+            times = [event.join_driver_created for _, event in level_broker_events] + [
+                event.event_driver_created for _, event in level_broker_events
+            ]
             num_orders = {}
             for time in times:
-                num_orders[time] = sum([1 for order in orders if time >= order[1] and time < order[2]])
+                num_orders[time] = sum(
+                    [1 for order in orders if time >= order[1] and time < order[2]]
+                )
 
             for event_id, event in level_broker_events:
-                yield event_id, ImmutableRecord(
+                yield (
+                    event_id,
+                    ImmutableRecord(
                         broker_orders_placed_on_level=len(orders),
                         broker_order_at_join=num_orders[event.join_driver_created],
-                        broker_orders_remaining_at_event=num_orders[event.event_driver_created])
+                        broker_orders_remaining_at_event=num_orders[
+                            event.event_driver_created
+                        ],
+                    ),
+                )
 
     return ImmutableDict(items())
-
-

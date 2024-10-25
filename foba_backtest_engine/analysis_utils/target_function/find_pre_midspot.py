@@ -1,7 +1,13 @@
-from numba import guvectorize
 import numpy as np
+from numba import guvectorize
 
-@guvectorize(['void(float64[:], float64[:], float64[:], float64[:])'], '(n),(m),(m)->(n)', nopython=True, target='parallel')
+
+@guvectorize(
+    ["void(float64[:], float64[:], float64[:], float64[:])"],
+    "(n),(m),(m)->(n)",
+    nopython=True,
+    target="parallel",
+)
 def find_pre_midspots(tradeTime, eventTime, midSpots, matched_midspots):
     n = tradeTime.shape[0]
     m = eventTime.shape[0]
@@ -10,5 +16,5 @@ def find_pre_midspots(tradeTime, eventTime, midSpots, matched_midspots):
         matched_midspots[i] = np.nan  # Initialize with NaN indicating no match
         while j < m and eventTime[j] < tradeTime[i]:
             j += 1
-        if j > 0 and eventTime[j-1] < tradeTime[i]:
-            matched_midspots[i] = midSpots[j-1]
+        if j > 0 and eventTime[j - 1] < tradeTime[i]:
+            matched_midspots[i] = midSpots[j - 1]

@@ -1,5 +1,5 @@
-from concurrent import futures
 import pickle
+from concurrent import futures
 from functools import wraps
 
 """
@@ -11,7 +11,10 @@ A suite of executors/functions for asynchronous OR synchronous function executio
 
 """
 
-def make_executor(parallel, *, safer=True, max_workers=None, executor_cls=futures.ProcessPoolExecutor):
+
+def make_executor(
+    parallel, *, safer=True, max_workers=None, executor_cls=futures.ProcessPoolExecutor
+):
     if not parallel:
         return SynchronousExecutor()
 
@@ -19,6 +22,7 @@ def make_executor(parallel, *, safer=True, max_workers=None, executor_cls=future
     if safer:
         executor = check_on_shutdown(check_pickles(executor))
     return executor
+
 
 def check_pickles(executor):
     original_submit = executor.submit
@@ -34,6 +38,7 @@ def check_pickles(executor):
     executor.submit = submit
 
     return executor
+
 
 def check_on_shutdown(executor):
     submitted = []
@@ -53,7 +58,7 @@ def check_on_shutdown(executor):
     @wraps(original_shutdown)
     def shutdown(wait=True):
         if not wait:
-            raise ValueError('only wait=True is supported')
+            raise ValueError("only wait=True is supported")
 
         original_shutdown(wait=True)
 
@@ -65,6 +70,7 @@ def check_on_shutdown(executor):
     executor.shutdown = shutdown
 
     return executor
+
 
 # export this for convenience
 as_completed = futures.as_completed
@@ -108,8 +114,7 @@ class DelayedExecutor(futures.Executor):
     """
 
     def submit(self, function, *args, **kwargs):
-        """Submit a function to be executed when the future's result is requested.
-        """
+        """Submit a function to be executed when the future's result is requested."""
         return DelayedFuture(function, args, kwargs)
 
 

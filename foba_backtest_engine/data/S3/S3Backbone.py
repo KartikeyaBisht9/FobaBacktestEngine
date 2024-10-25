@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import gzip
+import json
 import pickle
 import tempfile
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
-import json
+from typing import Any
 
 import boto3
 import pandas as pd
 from botocore.exceptions import ClientError
 
-OPTIVER_BUCKET_NAME = 'hkexsampledata'
+OPTIVER_BUCKET_NAME = "hkexsampledata"
 
 
 @dataclass(frozen=True)
@@ -178,10 +178,12 @@ class S3BucketActions:
             self.upload_file(file.name, path)
 
     def get_json(self, path: str) -> Any:
-        return self._get_via_temp_file(path, lambda filename: json.load(open(filename, "r")))
+        return self._get_via_temp_file(path, lambda filename: json.load(open(filename)))
 
     def put_json(self, path: str, data: Any):
-        self._put_via_temp_file(path, lambda filename: json.dump(data, open(filename, "w")))
+        self._put_via_temp_file(
+            path, lambda filename: json.dump(data, open(filename, "w"))
+        )
 
 
 @dataclass()
@@ -190,7 +192,7 @@ class S3Details:
     secret_key: str
     endpoint: str
     dashboard_url: str
-    region_name: Optional[str] = None
+    region_name: str | None = None
 
     def create_resource(self) -> boto3.resource:
         return self._create_s3(boto3.resource)
@@ -215,7 +217,7 @@ class S3Details:
             bucket_name=bucket_name,
         )
 
-    def shenron_cache_params(self, bucket_name: str) -> Dict[str, str]:
+    def shenron_cache_params(self, bucket_name: str) -> dict[str, str]:
         return {
             "endpoint": self.endpoint,
             "bucket": bucket_name,
@@ -224,16 +226,17 @@ class S3Details:
             "protocol": "s3",
         }
 
+
 """
 Currently
 """
 
 OPTIVER_BUCKET_DETAILS = S3Details(
-    endpoint = "https://s3.ap-southeast-2.amazonaws.com",
-    key='',
-    secret_key='',
-    dashboard_url='',
-    region_name = 'ap-southeast-2',
+    endpoint="https://s3.ap-southeast-2.amazonaws.com",
+    key="",
+    secret_key="",
+    dashboard_url="",
+    region_name="ap-southeast-2",
 )
 
 
@@ -245,17 +248,20 @@ def exists(obj):
     except ClientError:
         return False
 
+
 def download_text(obj):
     return obj.get()["Body"].read().decode("utf-8")
 
+
 def bucket_name_from_strategy(strategy):
-    if strategy == 'optiver_hft_d1':
+    if strategy == "optiver_hft_d1":
         return OPTIVER_BUCKET_DETAILS
     else:
         raise NotImplementedError()
 
+
 def s3_details_from_strategy(strategy):
-    if strategy == 'optiver_hft_d1':
+    if strategy == "optiver_hft_d1":
         return OPTIVER_BUCKET_DETAILS
     else:
         return None

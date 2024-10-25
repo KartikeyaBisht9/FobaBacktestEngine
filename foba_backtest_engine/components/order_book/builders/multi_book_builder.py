@@ -1,13 +1,15 @@
 import traceback
-import numpy as np
-import pandas as pd
-from enum import unique, Enum
 from collections import defaultdict
+from enum import Enum
+
+import pandas as pd
+from foba_backtest_engine.components.order_book.builders.OMDC import OmdcBookBuilder
+from foba_backtest_engine.components.order_book.utils import enums
+from foba_backtest_engine.components.order_book.utils.foba_feedupdates import (
+    get_feed_updates,
+)
 from foba_backtest_engine.utils import futures
 from foba_backtest_engine.utils.base_utils import get_logger
-from foba_backtest_engine.components.order_book.utils import enums
-from foba_backtest_engine.components.order_book.builders.OMDC import OmdcBookBuilder
-from foba_backtest_engine.components.order_book.utils.foba_feedupdates import get_feed_updates
 
 """
 MULTIBOOKBUILDER CLASS
@@ -20,7 +22,6 @@ iii) once the books are built - we can extract trades, pull etc into pandas data
 """
 
 
-
 def process_book_events(book, events, book_id):
     for fu in events:
         book.update(fu)
@@ -28,8 +29,19 @@ def process_book_events(book, events, book_id):
 
 
 class MultiBookBuilder:
-    def __init__(self, exchange, books, start, end, optiver_only, optiver_order_numbers, logger=None,
-                 log_triggers=False, feed_updates=None, filter=None):
+    def __init__(
+        self,
+        exchange,
+        books,
+        start,
+        end,
+        optiver_only,
+        optiver_order_numbers,
+        logger=None,
+        log_triggers=False,
+        feed_updates=None,
+        filter=None,
+    ):
         self.exchange = exchange
         self.books_string = books
         self.start = start
@@ -56,11 +68,12 @@ class MultiBookBuilder:
         :return:
         """
         if not feed_updates:
-            self.feed_updates_final = get_feed_updates(self.exchange, filter=self.filter)
+            self.feed_updates_final = get_feed_updates(
+                self.exchange, filter=self.filter
+            )
 
         else:
             self.feed_updates_final = feed_updates
-
 
     def build_books(self, parallel=False, max_workers=5):
         log_triggers = self.log_triggers
@@ -68,13 +81,27 @@ class MultiBookBuilder:
         if self.exchange == enums.Exchange.OMDC:
             book_builder = OmdcBookBuilder
         else:
-            raise ValueError("Could not find a book builder for the exchange: {}".format(self.exchange))
+            raise ValueError(
+                f"Could not find a book builder for the exchange: {self.exchange}"
+            )
 
-        self.logger.debug('build_books using ' + book_builder.__name__ + ': Started')
-        self.logger.debug('build_books using ' + book_builder.__name__ + ': Timerange - ' + self.start + '-' + self.end)
+        self.logger.debug("build_books using " + book_builder.__name__ + ": Started")
+        self.logger.debug(
+            "build_books using "
+            + book_builder.__name__
+            + ": Timerange - "
+            + self.start
+            + "-"
+            + self.end
+        )
 
         feed_update_count = len(self.feed_updates_final)
-        self.logger.debug('build_books using ' + book_builder.__name__ + ': feed_update_count - ' + repr(feed_update_count))
+        self.logger.debug(
+            "build_books using "
+            + book_builder.__name__
+            + ": feed_update_count - "
+            + repr(feed_update_count)
+        )
 
         progress_percent = 0.1
         processed_count = 0
@@ -84,20 +111,31 @@ class MultiBookBuilder:
                 if ~self.optiver_only or fu.order_number in self.optiver_order_numbers:
                     try:
                         if fu.book not in self.books.keys():
-                            self.books[fu.book] = book_builder(fu.book, log_triggers=log_triggers,
-                                                                   trade_change_reason=trade_change_reason)
+                            self.books[fu.book] = book_builder(
+                                fu.book,
+                                log_triggers=log_triggers,
+                                trade_change_reason=trade_change_reason,
+                            )
                         self.books[fu.book].update(fu)
                     except Exception as exception:
-                        traceback.print_exception(type(exception), exception, exception.__traceback__)
-                        raise Exception('Exception while processing feed update: {}'.format(fu)) from exception
+                        traceback.print_exception(
+                            type(exception), exception, exception.__traceback__
+                        )
+                        raise Exception(
+                            f"Exception while processing feed update: {fu}"
+                        ) from exception
 
                     processed_count += 1
                     if processed_count / feed_update_count >= progress_percent:
-                        self.logger.debug('build_books using ' + book_builder.__name__ + ': Percent Complete - ' +
-                                          str(round(progress_percent, 1)))
+                        self.logger.debug(
+                            "build_books using "
+                            + book_builder.__name__
+                            + ": Percent Complete - "
+                            + str(round(progress_percent, 1))
+                        )
                         progress_percent += 0.1
         else:
-            self.logger.debug('BUILDING BOOK IN PARALLEL')
+            self.logger.debug("BUILDING BOOK IN PARALLEL")
             book_processed_count = 0
             per_book_feed_updates = defaultdict(list)
             for fu in self.feed_updates_final:
@@ -106,22 +144,34 @@ class MultiBookBuilder:
             num_books = len(per_book_feed_updates)
 
             exchange = self.exchange
-            with futures.make_executor(parallel=parallel, max_workers=max_workers) as executor:
+            with futures.make_executor(
+                parallel=parallel, max_workers=max_workers
+            ) as executor:
+
                 def book_event_futures():
                     for book_id, events in per_book_feed_updates.items():
-                        book = book_builder(book_id, log_triggers=log_triggers,
-                                                trade_change_reason=trade_change_reason)
-                        yield executor.submit(process_book_events, book, events, book_id)
+                        book = book_builder(
+                            book_id,
+                            log_triggers=log_triggers,
+                            trade_change_reason=trade_change_reason,
+                        )
+                        yield executor.submit(
+                            process_book_events, book, events, book_id
+                        )
 
                 for future in futures.as_completed(book_event_futures()):
                     book_processed_count += 1
                     if book_processed_count / num_books >= progress_percent:
-                        self.logger.debug('build_books using ' + book_builder.__name__ + ': Percent Complete - ' +
-                                          str(round(progress_percent, 1)))
+                        self.logger.debug(
+                            "build_books using "
+                            + book_builder.__name__
+                            + ": Percent Complete - "
+                            + str(round(progress_percent, 1))
+                        )
                         progress_percent += 0.1
                     book_id, book = future.result()
                     self.books[book_id] = book
-        self.logger.debug('build_books using ' + book_builder.__name__ + ': Completed')
+        self.logger.debug("build_books using " + book_builder.__name__ + ": Completed")
 
     def get_result_as_df(self, include_etfs=None, include_pulls=False):
         all_events = []
@@ -141,9 +191,11 @@ class MultiBookBuilder:
         df = pd.DataFrame(all_events)
         if len(df) > 0:
             my_fields = list(all_events[0].keys())
-            my_enum_fields = [f for f in my_fields if isinstance(all_events[0][f], Enum)]
+            my_enum_fields = [
+                f for f in my_fields if isinstance(all_events[0][f], Enum)
+            ]
             for f in my_enum_fields:
                 df[f] = df[f].apply(lambda x: x.name)
-            df = df.sort(columns=['trade_created'], ascending=True)
+            df = df.sort(columns=["trade_created"], ascending=True)
 
         return df

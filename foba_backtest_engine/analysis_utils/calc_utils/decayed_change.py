@@ -1,7 +1,12 @@
+from typing import Any
+
+from numpy import dtype, float64, int64, ndarray
+
+from foba_backtest_engine.analysis_utils.calc_utils.decayed_sum_module import (
+    decayed_sum,
+    positive_decayed_sum,
+)
 from foba_backtest_engine.analysis_utils.calc_utils.ufunc.backbone import _change
-from foba_backtest_engine.analysis_utils.calc_utils.decayed_sum_module import decayed_sum, positive_decayed_sum
-from numpy import ndarray, dtype, int64, float64, errstate
-from typing import Any, Literal, TypeVar, cast
 
 
 def decayed_change(
@@ -20,6 +25,7 @@ def decayed_change(
     return decayed_sum(
         timestamp, _change(value, halflife, reverse), halflife, reverse=reverse
     )
+
 
 def positive_decayed_change(
     timestamp: ndarray[Any, dtype[int64]],

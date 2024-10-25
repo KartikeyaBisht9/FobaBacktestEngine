@@ -1,9 +1,14 @@
-from typing import Any, Literal, TypeVar, cast
+from typing import Any, Literal
+
 TZ_STR = "Asia/Hong_Kong"
-from pandas import DataFrame, Series, DatetimeIndex
-from numpy import dtype, int64, float64, ndarray, array, where, maximum, bool_, minimum
-from foba_backtest_engine.analysis_utils.calc_utils.decayed_weighted_average import decayed_weighted_average
+from numpy import array, bool_, dtype, float64, int64, maximum, minimum, ndarray
+from pandas import DataFrame
+
+from foba_backtest_engine.analysis_utils.calc_utils.decayed_weighted_average import (
+    decayed_weighted_average,
+)
 from foba_backtest_engine.analysis_utils.calc_utils.ufunc.backbone import ones_like
+
 RDVWAP_HALFLIVES = (1, 2, 4, 8, 15, 30, 60, 120, 240, 480, 900, 1800, 3600)
 
 

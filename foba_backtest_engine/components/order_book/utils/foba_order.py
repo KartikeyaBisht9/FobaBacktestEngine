@@ -1,7 +1,5 @@
-from foba_backtest_engine.utils.base_utils import ReprMixin
 from foba_backtest_engine.components.order_book.utils import enums
-from collections import namedtuple
-from abc import ABCMeta, abstractmethod
+from foba_backtest_engine.utils.base_utils import ReprMixin
 
 """
 ORDER CLASS
@@ -25,14 +23,17 @@ e) Best level information - stores when the order was on the best bid/ask
 
 """
 
+
 class Order(ReprMixin):
-    def __init__(self,
-                 message,
-                 price,
-                 triggers=None,
-                 trigger_reason=None,
-                 foreign_constructor=None,
-                 aggressive_volume=0):
+    def __init__(
+        self,
+        message,
+        price,
+        triggers=None,
+        trigger_reason=None,
+        foreign_constructor=None,
+        aggressive_volume=0,
+    ):
         self.created = message.created
         self.received = message.received
         self.timestamp = message.timestamp
@@ -83,7 +84,9 @@ class Order(ReprMixin):
     def give_dime_info_at_join(self, next_best_level):
         self.next_best_level = next_best_level
         self.next_best_level_price = next_best_level.price
-        self.count_on_next_best_level_at_join = next_best_level.number_of_orders_on_level
+        self.count_on_next_best_level_at_join = (
+            next_best_level.number_of_orders_on_level
+        )
         self.volume_on_next_best_level_at_join = next_best_level.volume_on_level
 
     def calculate_join_statistics(self):
@@ -117,6 +120,7 @@ c) update   ... updates the order as well as the 'level'
 
 """
 
+
 class OrderManager:
     def __init__(self):
         self.orders = {}
@@ -130,8 +134,12 @@ class OrderManager:
     def update_volume(self, message):
         volume_change = self.orders[message.order_number].volume - message.volume
         if volume_change < 0:
-            raise ValueError("update_volume should iponly be called for volume decreases")
-        self.orders[message.order_number].level.update_volume(self.orders[message.order_number], volume_change)
+            raise ValueError(
+                "update_volume should iponly be called for volume decreases"
+            )
+        self.orders[message.order_number].level.update_volume(
+            self.orders[message.order_number], volume_change
+        )
         self.orders[message.order_number].volume = message.volume
 
     def update_volume_pulled(self, message):
@@ -142,10 +150,12 @@ class OrderManager:
     def increment_number_updates(self, message, depth):
         if message.volume < self.orders[message.order_number].volume:
             self.orders[message.order_number].volume_reducing_updates += 1
-            self.orders[message.order_number].volume_reducing_updates_received.append(message.received)
+            self.orders[message.order_number].volume_reducing_updates_received.append(
+                message.received
+            )
         elif message.volume == self.orders[message.order_number].volume:
             self.orders[message.order_number].inplace_updates += 1
-            self.orders[message.order_number].inplace_updates_received.append(message.received)
+            self.orders[message.order_number].inplace_updates_received.append(
+                message.received
+            )
             self.orders[message.order_number].inplace_updates_depth.append(depth)
-
-

@@ -1,10 +1,11 @@
-from foba_backtest_engine.data.S3.S3OptiverResearchActions import OPTIVER_BUCKET_ACTIONS
-from foba_backtest_engine.components.order_book.utils import MyRow as MyRow
-from foba_backtest_engine.utils.time_utils import to_milli_timestamp
-from foba_backtest_engine.utils.base_utils import ImmutableDict
-from foba_backtest_engine.enrichment import provides
 from collections import namedtuple
+
 import pandas as pd
+
+from foba_backtest_engine.components.order_book.utils import MyRow as MyRow
+from foba_backtest_engine.enrichment import provides
+from foba_backtest_engine.utils.base_utils import ImmutableDict
+from foba_backtest_engine.utils.time_utils import to_milli_timestamp
 
 """
 Expected BrokerQueue (for OMDC only)
@@ -33,27 +34,45 @@ Expected BrokerQueue (for OMDC only)
 
 """
 
-OmdcBrokerQueue = namedtuple('OmdcBrokerQueue', (
-    'createdNanos_',
-    'received_',
-    'seq_',
-    'securityCode_',
-    'side_',
-    'priority_',
-    'brokerNumber_',
-    'level_',
-))
+OmdcBrokerQueue = namedtuple(
+    "OmdcBrokerQueue",
+    (
+        "createdNanos_",
+        "received_",
+        "seq_",
+        "securityCode_",
+        "side_",
+        "priority_",
+        "brokerNumber_",
+        "level_",
+    ),
+)
+
 
 def get_omdc_broker_queue(filter, security_codes):
-    start_time, end_time, date_to_pull, date_filter = to_milli_timestamp(filter.start_time) * 1e6, to_milli_timestamp(
-        filter.end_time) * 1e6, filter.start_time.format('YYYY-MM-DD'), int(filter.start_time.format('YYYYMMDD'))
-    omdc = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/OMDC.feather")
-    # omdc = OPTIVER_BUCKET_ACTIONS.get_feather(path = f'OMDC/ConflatedBrokerQueue/{date_to_pull}.feather')
-    omdc["securityCode_"] = omdc["securityCode_"].apply(lambda x:str(x) if isinstance(x, int) else x)
-    omdc = omdc[omdc['securityCode_'].isin(security_codes)]
-    omdc_filter = omdc[omdc["date_id"]==date_filter].reset_index(drop = True)
-    omdc_filter_time = omdc_filter[(omdc_filter['createdNanos_'] >= start_time) & (omdc_filter['createdNanos_'] <= end_time)]
-    omdc_final = omdc_filter_time.sort_values(by=['timestampNanos_', 'side_', 'priority_'])
+    start_time, end_time, date_to_pull, date_filter = (
+        to_milli_timestamp(filter.start_time) * 1e6,
+        to_milli_timestamp(filter.end_time) * 1e6,
+        filter.start_time.format("YYYY-MM-DD"),
+        int(filter.start_time.format("YYYYMMDD")),
+    )
+    # omdc = pd.read_feather(
+    #     "/Users/kartikeyabisht/FobaBacktestEngine/temp_data/OMDC.feather"
+    # )
+    omdc = pd.read_parquet(filter.conflated_broker_queue_path)
+    
+
+    omdc["securityCode_"] = omdc["securityCode_"].apply(
+        lambda x: str(x) if isinstance(x, int) else x
+    )
+    omdc = omdc[omdc["securityCode_"].isin(security_codes)]
+    omdc_filter_time = omdc[
+        (omdc["createdNanos_"] >= start_time)
+        & (omdc["createdNanos_"] <= end_time)
+    ]
+    omdc_final = omdc_filter_time.sort_values(
+        by=["timestampNanos_", "side_", "priority_"]
+    )
     omdc_final_list = []
     for _, row in omdc_final.iterrows():
         row_dict = row.to_dict()
@@ -61,9 +80,11 @@ def get_omdc_broker_queue(filter, security_codes):
     return omdc_final_list
 
 
-@provides('omdc_broker_queue')
+@provides("omdc_broker_queue")
 def omdc_broker_queue(filter, foba_events):
-    security_codes = ImmutableDict((event.book_id, event.book_id) for event in foba_events.values())
+    security_codes = ImmutableDict(
+        (event.book_id, event.book_id) for event in foba_events.values()
+    )
     result_dict = dict()
 
     books = []
@@ -81,4 +102,6 @@ def omdc_broker_queue(filter, foba_events):
             result_dict[book] = [e for e in data if e.securityCode_ == code]
         start = end
 
-    return ImmutableDict((book, broker_queue) for book, broker_queue in result_dict.items())
+    return ImmutableDict(
+        (book, broker_queue) for book, broker_queue in result_dict.items()
+    )

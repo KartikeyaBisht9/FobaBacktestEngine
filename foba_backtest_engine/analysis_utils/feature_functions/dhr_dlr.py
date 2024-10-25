@@ -1,10 +1,14 @@
 from collections.abc import Sequence
-from typing import Any, Literal, TypeVar, cast
+from typing import Any
+
 TZ_STR = "Asia/Hong_Kong"
+from numpy import array, bool_, dtype, float64, indices, int64, ndarray, where
 from pandas import DataFrame
-from foba_backtest_engine.analysis_utils.calc_utils.decayed_change import positive_decayed_change
+
+from foba_backtest_engine.analysis_utils.calc_utils.decayed_change import (
+    positive_decayed_change,
+)
 from foba_backtest_engine.analysis_utils.calc_utils.ufunc.backbone import bfill, ffill
-from numpy import dtype, int64, float64, ndarray, bool_, array, indices, where
 
 DIRECTIONS = (1, -1)
 DECAYED_RETURN_HALFLIVES = (1, 8, 60, 480)

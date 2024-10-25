@@ -1,11 +1,12 @@
-from numpy import absolute, dtype, float64, ndarray, sign, where, pi, arctan
 from typing import Any, cast
+
+from numpy import absolute, arctan, dtype, float64, ndarray, pi, sign, where
 
 
 def weighted_column_sum_target(column_weight_pairs, df):
     return df["trigger_direction"] * (
-            sum([df[cn].values * w for (cn, w) in column_weight_pairs])
-            - df["pre_midspot"].values
+        sum([df[cn].values * w for (cn, w) in column_weight_pairs])
+        - df["pre_midspot"].values
     )
 
 
@@ -37,17 +38,17 @@ def hkex_calculate_tick_size(price):
 
 
 def cap(
-        values: ndarray[Any, dtype[float64]], bound: float
+    values: ndarray[Any, dtype[float64]], bound: float
 ) -> ndarray[Any, dtype[float64]]:
     return bound * 2 / pi * arctan(values / bound * pi / 2)
 
 
 def fixed_tick_bps(
-        values: ndarray[Any, dtype[float64]],
-        reference_price: ndarray[Any, dtype[float64]],
-        tick_size: ndarray[Any, dtype[float64]],
-        new_tick_range: float,
-        bound: float,
+    values: ndarray[Any, dtype[float64]],
+    reference_price: ndarray[Any, dtype[float64]],
+    tick_size: ndarray[Any, dtype[float64]],
+    new_tick_range: float,
+    bound: float,
 ) -> ndarray[Any, dtype[float64]]:
     abs_values = absolute(values)
 
@@ -73,12 +74,13 @@ def fixed_tick_bps(
             ),
         )
 
+
 def crypto_fixed_tick_bps(
-        values: ndarray[Any, dtype[float64]],
-        reference_price: ndarray[Any, dtype[float64]],
-        tick_size: ndarray[Any, dtype[float64]],
-        new_tick_range: float,
-        bound: float,
+    values: ndarray[Any, dtype[float64]],
+    reference_price: ndarray[Any, dtype[float64]],
+    tick_size: ndarray[Any, dtype[float64]],
+    new_tick_range: float,
+    bound: float,
 ) -> ndarray[Any, dtype[float64]]:
     abs_values = absolute(values)
 

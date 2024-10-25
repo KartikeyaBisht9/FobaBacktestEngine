@@ -1,5 +1,6 @@
 from enum import Enum, EnumMeta
 
+
 class MyRow:
     def __init__(self, row_dict):
         self._row_dict = row_dict
@@ -26,6 +27,7 @@ class MyRow:
     def _add_attributes(self):
         for key in self._row_dict:
             setattr(self, key, self._row_dict[key])
+
 
 def apply_mapping(df, column, mapping, final_column_name=None):
     """

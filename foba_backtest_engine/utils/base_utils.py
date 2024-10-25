@@ -1,12 +1,12 @@
-from collections.abc import Mapping, Iterator
-from collections import defaultdict
-from heapq import heappush, heappop
-from functools import total_ordering
 import logging
+from collections import defaultdict
+from collections.abc import Mapping
+from functools import total_ordering
+from heapq import heappop, heappush
+
 
 class ReprMixin:
-    """Mixin to define __repr__ so objects are printed nicer (e.g. for debugging).
-    """
+    """Mixin to define __repr__ so objects are printed nicer (e.g. for debugging)."""
 
     def __repr__(self):
         # TODO does __dict__ work with __slots__?
@@ -14,14 +14,13 @@ class ReprMixin:
 
 
 def _repr(self, attrs):
-    items = ('{attr}={value!r}'.format(attr=attr, value=getattr(self, attr)) for attr in attrs)
-    return '{cls}({items})'.format(cls=self.__class__.__name__, items=', '.join(items))
+    items = (f"{attr}={getattr(self, attr)!r}" for attr in attrs)
+    return "{cls}({items})".format(cls=self.__class__.__name__, items=", ".join(items))
 
 
 class Record(ReprMixin):
     def __init__(self, **kwargs):
-        """Create a new record object with fields and values as given in kwargs.
-        """
+        """Create a new record object with fields and values as given in kwargs."""
         self.__dict__.update(kwargs)
 
     def _asdict(self):
@@ -92,7 +91,9 @@ def get_logger(module_name, level=logging.DEBUG):
     logger = logging.getLogger(module_name)
     logger.setLevel(level)
     handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.handlers = []
     logger.addHandler(handler)
@@ -113,19 +114,21 @@ class ImmutableRecord(Record):
 
     def __init__(self, **kwargs):
         for field in kwargs:
-            if field[0] == '_':
-                raise ValueError('Field names cannot start with an underscore: {!r}'.format(field))
+            if field[0] == "_":
+                raise ValueError(
+                    f"Field names cannot start with an underscore: {field!r}"
+                )
 
         super().__init__(**kwargs)
-        self.__dict__['_fields'] = tuple(self.__dict__)
+        self.__dict__["_fields"] = tuple(self.__dict__)
 
     def _asdict(self):
         data = super()._asdict()
-        del data['_fields']
+        del data["_fields"]
         return data
 
     def __setattr__(self, key, value):
-        raise TypeError('Attribute assignment is not supported')
+        raise TypeError("Attribute assignment is not supported")
 
 
 def multi_dict(values, key):
@@ -145,6 +148,7 @@ def multi_dict(values, key):
         d[key(value)].append(value)
     return d
 
+
 def sorted_multi_dict(values, *, group_key, sort_key):
     """Create a dict that groups values together which have the same group_key, and sorts each group by the sort_key.
 
@@ -161,6 +165,7 @@ def sorted_multi_dict(values, *, group_key, sort_key):
         group_values.sort(key=sort_key)
     return d
 
+
 def invert_dict_to_dict_list(dict_to_invert):
     """
     Inverts a dictionary with common values to a new dictionary where the values are the keys,
@@ -173,6 +178,7 @@ def invert_dict_to_dict_list(dict_to_invert):
         inverted_dict[v] = inverted_dict.get(v, [])
         inverted_dict[v].append(k)
     return inverted_dict
+
 
 def common_key_items(*dicts):
     """Iterate through common keys and their values from a number of dicts.
@@ -189,14 +195,16 @@ def common_key_items(*dicts):
     for key in common_keys:
         yield (key,) + tuple(d[key] for d in dicts)
 
+
 def sorted_iterators(*sequences):
     for sequence, dispatch, key in sequences:
         sequence.sort(key=key)
         yield iter(sequence), dispatch, key
 
+
 def nan_if_none(value):
     if value is None:
-        return float('nan')
+        return float("nan")
     return value
 
 
@@ -243,7 +251,7 @@ class Stream:
 
     def __lt__(self, other):
         return (self.priority, self.rank) < (other.priority, other.rank)
-    
+
 
 def process_by_priority(*iterators):
     """

@@ -1,6 +1,13 @@
-from foba_backtest_engine.analysis_utils.calc_utils.ufunc.backbone import _decayed_sum, broadcast_halflife, _positive_decayed_sum
-from numpy import ndarray, dtype, int64, float64, errstate
-from typing import Any, Literal, TypeVar, cast
+from typing import Any
+
+from numpy import dtype, errstate, float64, int64, ndarray
+
+from foba_backtest_engine.analysis_utils.calc_utils.ufunc.backbone import (
+    _decayed_sum,
+    _positive_decayed_sum,
+    broadcast_halflife,
+)
+
 
 def decayed_sum(
     timestamp: ndarray[Any, dtype[int64]],

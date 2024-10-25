@@ -1,12 +1,19 @@
 import warnings
-from foba_backtest_engine.components.order_book.utils.foba_order import Order, OrderManager
-from foba_backtest_engine.components.order_book.utils.order_queue import OrderQueue
-from foba_backtest_engine.components.order_book.utils.foba_levels import Level, LevelManager
-from foba_backtest_engine.components.order_book.utils.foba_events import FobaEvent
-from foba_backtest_engine.components.order_book.utils.foba_states import FeedState, OrderCountState
+
 from foba_backtest_engine.components.order_book.utils import enums
-from copy import deepcopy
-import operator
+from foba_backtest_engine.components.order_book.utils.foba_events import FobaEvent
+from foba_backtest_engine.components.order_book.utils.foba_levels import (
+    LevelManager,
+)
+from foba_backtest_engine.components.order_book.utils.foba_order import (
+    Order,
+    OrderManager,
+)
+from foba_backtest_engine.components.order_book.utils.foba_states import (
+    FeedState,
+    OrderCountState,
+)
+from foba_backtest_engine.components.order_book.utils.order_queue import OrderQueue
 
 """
 OMDC Book Builder
@@ -38,6 +45,7 @@ b) Methods/execution flow
     We have the update method that parses FeedUpdate_ rows & routes it to further processors that deal w/ different event types
     
 """
+
 
 class OmdcBookBuilder:
     def __init__(self, book_id, **kwargs):
@@ -79,7 +87,6 @@ class OmdcBookBuilder:
             self.update_delete(message, order_manager, level_manager, is_trade)
         elif message.command == enums.Command.UPDATE:
             if message.order_number not in order_manager.orders:
-                warnings.warn('Attempting to UPDATE unknown order: ' + str(message))
                 self.update_add(message, order_manager, level_manager, False)
             self.update_update(message, order_manager, level_manager, is_trade)
         else:
@@ -111,9 +118,13 @@ class OmdcBookBuilder:
         level_manager.process_add_message(order)
         if self.persist_order_queue:
             if message.side == enums.Side.BID:
-                self.bid_order_queue.add(message.timestamp, price, int(message.order_number))
+                self.bid_order_queue.add(
+                    message.timestamp, price, int(message.order_number)
+                )
             else:
-                self.ask_order_queue.add(message.timestamp, price, int(message.order_number))
+                self.ask_order_queue.add(
+                    message.timestamp, price, int(message.order_number)
+                )
 
     def update_delete(self, message, order_manager, level_manager, is_trade):
         """
@@ -122,7 +133,6 @@ class OmdcBookBuilder:
         :return:
         """
         if message.order_number not in order_manager.orders:
-            warnings.warn('Attempting to DELETE unknown order: ' + str(message))
             return
         if is_trade:
             self.process_trade(message, order_manager, level_manager)
@@ -134,9 +144,13 @@ class OmdcBookBuilder:
         order_manager.delete(message.order_number)
         if self.persist_order_queue:
             if message.side == enums.Side.BID:
-                self.bid_order_queue.delete(message.timestamp, price, message.order_number)
+                self.bid_order_queue.delete(
+                    message.timestamp, price, message.order_number
+                )
             else:
-                self.ask_order_queue.delete(message.timestamp, price, message.order_number)
+                self.ask_order_queue.delete(
+                    message.timestamp, price, message.order_number
+                )
 
     def update_update(self, message, order_manager, level_manager, is_trade):
         """
@@ -149,20 +163,30 @@ class OmdcBookBuilder:
 
         if message.volume > order_manager.orders[message.order_number].volume:
             if is_trade:
-                raise ValueError('Cannot increase volume on last done!')
+                raise ValueError("Cannot increase volume on last done!")
             implied_price = order_manager.orders[message.order_number].price
-            level_manager.process_delete_message(message, order_manager.orders, implied_price)
+            level_manager.process_delete_message(
+                message, order_manager.orders, implied_price
+            )
             order_manager.delete(message.order_number)
             new_order = Order(message, implied_price)
             order_manager.add(message.order_number, new_order)
             level_manager.process_add_message(new_order)
             if self.persist_order_queue:
                 if message.side == enums.Side.BID:
-                    self.bid_order_queue.update(message.timestamp, implied_price, message.order_number,
-                                                volume_decrease=False)
+                    self.bid_order_queue.update(
+                        message.timestamp,
+                        implied_price,
+                        message.order_number,
+                        volume_decrease=False,
+                    )
                 else:
-                    self.ask_order_queue.update(message.timestamp, implied_price, message.order_number,
-                                                volume_decrease=False)
+                    self.ask_order_queue.update(
+                        message.timestamp,
+                        implied_price,
+                        message.order_number,
+                        volume_decrease=False,
+                    )
         elif message.volume <= order_manager.orders[message.order_number].volume:
             if not is_trade:
                 order_manager.update_volume_pulled(message)
@@ -171,9 +195,19 @@ class OmdcBookBuilder:
             price = order_manager.orders[message.order_number].price
             if self.persist_order_queue:
                 if message.side == enums.Side.BID:
-                    self.bid_order_queue.update(message.timestamp, price, message.order_number, volume_decrease=True)
+                    self.bid_order_queue.update(
+                        message.timestamp,
+                        price,
+                        message.order_number,
+                        volume_decrease=True,
+                    )
                 else:
-                    self.ask_order_queue.update(message.timestamp, price, message.order_number, volume_decrease=True)
+                    self.ask_order_queue.update(
+                        message.timestamp,
+                        price,
+                        message.order_number,
+                        volume_decrease=True,
+                    )
 
     def process_trade(self, message, order_manager, level_manager):
         """
@@ -185,7 +219,9 @@ class OmdcBookBuilder:
         :param level_manager: The side level manager.
         :return:
         """
-        level_manager.update_order_best_level_times_for_delete(message, order_manager.orders)
+        level_manager.update_order_best_level_times_for_delete(
+            message, order_manager.orders
+        )
         trade = FobaEvent(message, order_manager.orders)
         self.trades.append(trade)
         self.event_trades.append(trade)
@@ -201,10 +237,17 @@ class OmdcBookBuilder:
         :param level_manager: The side level manager.
         :return:
         """
-        level_manager.update_order_best_level_times_for_delete(message, order_manager.orders)
-        pull = FobaEvent(message, order_manager.orders,
-                         event_type=enums.EventType.PULL,
-                         event_depth=level_manager.get_distance(order_manager.orders[message.order_number].price))
+        level_manager.update_order_best_level_times_for_delete(
+            message, order_manager.orders
+        )
+        pull = FobaEvent(
+            message,
+            order_manager.orders,
+            event_type=enums.EventType.PULL,
+            event_depth=level_manager.get_distance(
+                order_manager.orders[message.order_number].price
+            ),
+        )
         self.pulls.append(pull)
         level_manager.enrich_open_levels_with_pull(pull, order_manager)
 
@@ -214,55 +257,78 @@ class OmdcBookBuilder:
         if is_trade:
             price_ = self.trades[-1].trade_price
             volume_ = self.trades[-1].trade_volume
-            foreignLd_aggressorSide_ = 'S' if message.side is enums.Side.BID else 'B'
+            foreignLd_aggressorSide_ = "S" if message.side is enums.Side.BID else "B"
             isTrade_ = 1
         else:
             price_ = None
             volume_ = None
-            foreignLd_aggressorSide_ = ' '
+            foreignLd_aggressorSide_ = " "
             isTrade_ = 0
 
-        feed_state = FeedState(bookId_=message.book,
-                               createdNanos_=message.created,
-                               received_=message.received,
-                               timestamp_=message.timestamp,
-                               bids_0_price_=retail_bids[0][0], bids_0_volume_=retail_bids[0][1],
-                               bids_1_price_=retail_bids[1][0], bids_1_volume_=retail_bids[1][1],
-                               bids_2_price_=retail_bids[2][0], bids_2_volume_=retail_bids[2][1],
-                               bids_3_price_=retail_bids[3][0], bids_3_volume_=retail_bids[3][1],
-                               bids_4_price_=retail_bids[4][0], bids_4_volume_=retail_bids[4][1],
-                               asks_0_price_=retail_asks[0][0], asks_0_volume_=retail_asks[0][1],
-                               asks_1_price_=retail_asks[1][0], asks_1_volume_=retail_asks[1][1],
-                               asks_2_price_=retail_asks[2][0], asks_2_volume_=retail_asks[2][1],
-                               asks_3_price_=retail_asks[3][0], asks_3_volume_=retail_asks[3][1],
-                               asks_4_price_=retail_asks[4][0], asks_4_volume_=retail_asks[4][1],
-                               price_=price_,
-                               volume_=volume_,
-                               foreignLd_aggressorSide_=foreignLd_aggressorSide_,
-                               isTrade_=isTrade_)
+        feed_state = FeedState(
+            bookId_=message.book,
+            createdNanos_=message.created,
+            received_=message.received,
+            timestamp_=message.timestamp,
+            bids_0_price_=retail_bids[0][0],
+            bids_0_volume_=retail_bids[0][1],
+            bids_1_price_=retail_bids[1][0],
+            bids_1_volume_=retail_bids[1][1],
+            bids_2_price_=retail_bids[2][0],
+            bids_2_volume_=retail_bids[2][1],
+            bids_3_price_=retail_bids[3][0],
+            bids_3_volume_=retail_bids[3][1],
+            bids_4_price_=retail_bids[4][0],
+            bids_4_volume_=retail_bids[4][1],
+            asks_0_price_=retail_asks[0][0],
+            asks_0_volume_=retail_asks[0][1],
+            asks_1_price_=retail_asks[1][0],
+            asks_1_volume_=retail_asks[1][1],
+            asks_2_price_=retail_asks[2][0],
+            asks_2_volume_=retail_asks[2][1],
+            asks_3_price_=retail_asks[3][0],
+            asks_3_volume_=retail_asks[3][1],
+            asks_4_price_=retail_asks[4][0],
+            asks_4_volume_=retail_asks[4][1],
+            price_=price_,
+            volume_=volume_,
+            foreignLd_aggressorSide_=foreignLd_aggressorSide_,
+            isTrade_=isTrade_,
+        )
 
         self.feed_states.append(feed_state)
 
     def append_order_count_state(self, message):
         retail_bids = self.bid_levels.get_count_on_levels(5)
         retail_asks = self.ask_levels.get_count_on_levels(5)
-        order_count_state = OrderCountState(bookId_=message.book,
-                                            createdNanos_=message.created,
-                                            received_=message.received,
-                                            timestamp_=message.timestamp,
-                                            bids_0_count_=retail_bids[0][0], bids_0_max_volume_=retail_bids[0][1],
-                                            bids_1_count_=retail_bids[1][0], bids_1_max_volume_=retail_bids[1][1],
-                                            bids_2_count_=retail_bids[2][0], bids_2_max_volume_=retail_bids[2][1],
-                                            bids_3_count_=retail_bids[3][0], bids_3_max_volume_=retail_bids[3][1],
-                                            bids_4_count_=retail_bids[4][0], bids_4_max_volume_=retail_bids[4][1],
-                                            asks_0_count_=retail_asks[0][0], asks_0_max_volume_=retail_asks[0][1],
-                                            asks_1_count_=retail_asks[1][0], asks_1_max_volume_=retail_asks[1][1],
-                                            asks_2_count_=retail_asks[2][0], asks_2_max_volume_=retail_asks[2][1],
-                                            asks_3_count_=retail_asks[3][0], asks_3_max_volume_=retail_asks[3][1],
-                                            asks_4_count_=retail_asks[4][0], asks_4_max_volume_=retail_asks[4][1],
-                                            isTrade_=0)
+        order_count_state = OrderCountState(
+            bookId_=message.book,
+            createdNanos_=message.created,
+            received_=message.received,
+            timestamp_=message.timestamp,
+            bids_0_count_=retail_bids[0][0],
+            bids_0_max_volume_=retail_bids[0][1],
+            bids_1_count_=retail_bids[1][0],
+            bids_1_max_volume_=retail_bids[1][1],
+            bids_2_count_=retail_bids[2][0],
+            bids_2_max_volume_=retail_bids[2][1],
+            bids_3_count_=retail_bids[3][0],
+            bids_3_max_volume_=retail_bids[3][1],
+            bids_4_count_=retail_bids[4][0],
+            bids_4_max_volume_=retail_bids[4][1],
+            asks_0_count_=retail_asks[0][0],
+            asks_0_max_volume_=retail_asks[0][1],
+            asks_1_count_=retail_asks[1][0],
+            asks_1_max_volume_=retail_asks[1][1],
+            asks_2_count_=retail_asks[2][0],
+            asks_2_max_volume_=retail_asks[2][1],
+            asks_3_count_=retail_asks[3][0],
+            asks_3_max_volume_=retail_asks[3][1],
+            asks_4_count_=retail_asks[4][0],
+            asks_4_max_volume_=retail_asks[4][1],
+            isTrade_=0,
+        )
         self.order_count_states.append(order_count_state)
-
 
     def update_event_trades(self):
         aggressor_volume = sum([t.trade_volume for t in self.event_trades])

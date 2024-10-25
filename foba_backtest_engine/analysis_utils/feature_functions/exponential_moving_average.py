@@ -1,6 +1,8 @@
-from foba_backtest_engine.analysis_utils.calc_utils.decayed_change import decayed_change
-from numpy import ndarray, dtype, int64, float64, errstate
 from typing import Any
+
+from numpy import dtype, float64, int64, ndarray
+
+from foba_backtest_engine.analysis_utils.calc_utils.decayed_change import decayed_change
 
 
 def exponential_moving_average(

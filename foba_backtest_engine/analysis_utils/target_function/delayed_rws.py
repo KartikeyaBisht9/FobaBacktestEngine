@@ -1,18 +1,19 @@
-from typing import Any, Literal, TypeVar, cast
+from typing import Any, cast
+
 TZ_STR = "Asia/Hong_Kong"
 from datetime import time as Time
-from pandas import DataFrame, Series, DatetimeIndex
-from numpy import dtype, int64, ndarray, float64, array, where, maximum, tile
-from numba import guvectorize, float64, njit
+
 import numpy as np
-
-
+from numba import float64, guvectorize, njit
+from numpy import array, dtype, float64, int64, maximum, ndarray, tile, where
+from pandas import DataFrame, DatetimeIndex, Series
 
 RDVWAP_HALFLIVES = (1, 2, 4, 8, 15, 30, 60, 120, 240, 480, 900, 1800, 3600)
 
 """
 np version for those who dont like gu-vectorize
 """
+
 
 def calculate_delayed_rws_ex_lunch(
     timestamp: ndarray[Any, dtype[int64]],
@@ -36,7 +37,8 @@ def calculate_delayed_rws_ex_lunch(
 
     idx = maximum(
         timestamp_adjusted.searchsorted(
-            tile(timestamp_adjusted, (len(RDVWAP_HALFLIVES), 1)) + rws_periods_array.reshape((-1, 1)),  # type: ignore
+            tile(timestamp_adjusted, (len(RDVWAP_HALFLIVES), 1))
+            + rws_periods_array.reshape((-1, 1)),  # type: ignore
         )
         - 1,
         0,
@@ -75,46 +77,41 @@ def adjust_for_lunch_inplace(timestamp: np.ndarray, exclude_lunch: bool) -> None
 
 
 @guvectorize(
-    ['void(float64[:], float64[:], float64[:], float64[:], float64[:], float64[:,:])'],
-    '(n),(m),(m),(m),(S),(n,J)',
-    target='parallel'
+    ["void(float64[:], float64[:], float64[:], float64[:], float64[:], float64[:,:])"],
+    "(n),(m),(m),(m),(S),(n,J)",
+    target="parallel",
 )
 def calculate_delayed_rws_midspot(
-    trade_times,
-    exchange_times,
-    midspots,
-    rws,
-    intervals,
-    result
+    trade_times, exchange_times, midspots, rws, intervals, result
 ):
     n = trade_times.shape[0]
     m = exchange_times.shape[0]
     S = intervals.shape[0]
-    J = 2 * S 
+    J = 2 * S
 
     """
     Iterate over each time interval (S) and for each timestamp
     """
 
-    for p in range(S):                                      
-        current_position = 0    
-        interval_ns = intervals[p] * 1_000_000_000      
-        for i in range(n):      
+    for p in range(S):
+        current_position = 0
+        interval_ns = intervals[p] * 1_000_000_000
+        for i in range(n):
             cutoff_time = trade_times[i] + interval_ns
 
-            if i > 0 and trade_times[i] == trade_times[i-1]:
+            if i > 0 and trade_times[i] == trade_times[i - 1]:
                 result[i, p] = result[i - 1, p]
                 result[i, p + S] = result[i - 1, p + S]
                 continue
 
-            midspot_val = midspots[-1]  
-            rws_val = rws[-1]  
+            midspot_val = midspots[-1]
+            rws_val = rws[-1]
 
             for j in range(current_position, m):
                 if exchange_times[j] > cutoff_time:
                     midspot_val = midspots[j]
                     rws_val = rws[j]
-                    current_position = j  
+                    current_position = j
                     break
 
             result[i, p] = midspot_val

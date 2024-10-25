@@ -1,26 +1,35 @@
-from foba_backtest_engine.components.order_book.utils.enums import FobaEvent, EventType, Side, EventScore, JoinScore, OrderType
-from foba_backtest_engine.utils.time_utils import to_nano_timestamp
-from foba_backtest_engine.enrichment import provides, id_dict
 import logging
 
-@provides('foba_events')
+from foba_backtest_engine.components.order_book.utils.enums import (
+    EventScore,
+    EventType,
+    FobaEvent,
+    JoinScore,
+    OrderType,
+    Side,
+)
+from foba_backtest_engine.enrichment import id_dict, provides
+from foba_backtest_engine.utils.time_utils import to_nano_timestamp
+
+
+@provides("foba_events")
 def extract_foba_events(
-    pybuilders, 
-    filter, 
-    exclude_pulls=False, 
+    pybuilders,
+    filter,
+    exclude_pulls=False,
     include_only_optiver_pulls=False,
-    optiver_order_numbers=(), 
-    exclude_inplace_updates=True
-    ):
+    optiver_order_numbers=(),
+    exclude_inplace_updates=True,
+):
     """
     :param pybuilders:
     :return: @provides('foba_events')
     """
-    
+
     logger = logging.getLogger(__name__)
     start_time_ns = to_nano_timestamp(filter.start_time)
     end_time_ns = to_nano_timestamp(filter.end_time)
-        
+
     events = []
     for book_id, builder in pybuilders.items():
         logger.info(f"Extracting FOBA for book_id: {book_id}")
@@ -30,22 +39,23 @@ def extract_foba_events(
             else:
                 print(trade_event.trade_received)
 
-
         if not exclude_pulls:
             for pull_event in builder.pulls:
                 if start_time_ns < trade_event.trade_received < end_time_ns:
-                    pull_order_number = int(str(pull_event.order_number).split('_')[0])
+                    pull_order_number = int(str(pull_event.order_number).split("_")[0])
                     if include_only_optiver_pulls:
                         if pull_order_number in optiver_order_numbers:
                             events.append(pull_event)
                     else:
                         events.append(pull_event)
-                    
+
         if not exclude_inplace_updates:
             for event in builder.inplace_updates:
                 events.append(event)
     logger.info(f"Total FOBA events = {len(events)}")
-    
+    sorted_events = sorted(events, key=lambda x:x.trade_received)
+    del events
+
     return id_dict(
         FobaEvent(
             id=None,
@@ -69,7 +79,13 @@ def extract_foba_events(
             volume_ahead_at_join=event.volume_ahead_at_join,
             level_cumulative_joined_volume_at_join=event.rank_at_join,
             count_ahead_at_join=event.count_ahead_at_join,
-            event_type=EventType.TRADE if event.type == EventType.TRADE else (EventType.INPLACE_UPDATE if event.type == EventType.INPLACE_UPDATE else EventType.PULL),
+            event_type=EventType.TRADE
+            if event.type == EventType.TRADE
+            else (
+                EventType.INPLACE_UPDATE
+                if event.type == EventType.INPLACE_UPDATE
+                else EventType.PULL
+            ),
             event_exchange_timestamp=event.trade_timestamp,
             event_driver_received=event.trade_received,
             event_driver_created=event.trade_created,
@@ -83,7 +99,10 @@ def extract_foba_events(
             count_behind_at_event=event.count_behind_at_trade,
             volume_ahead_at_event=event.volume_ahead_at_trade,
             count_ahead_at_event=event.count_ahead_at_trade,
-            level_volume_at_event=event.volume_behind_at_trade + event.volume_ahead_at_trade + event.trade_volume + event.volume_remaining,
+            level_volume_at_event=event.volume_behind_at_trade
+            + event.volume_ahead_at_trade
+            + event.trade_volume
+            + event.volume_remaining,
             remaining_volume=event.volume_remaining,
             cumulative_pulled_volume=event.volume_pulled,
             order_type=OrderType.NORMAL,
@@ -98,6 +117,7 @@ def extract_foba_events(
             next_best_level_price=event.next_best_level_price,
             next_best_level_order_count_at_join=event.next_best_level_order_count_at_join,
             next_best_level_volume_at_join=event.next_best_level_volume_at_join,
-            best_level_times=event.best_level_times
-        ) for event in events
+            best_level_times=event.best_level_times,
+        )
+        for event in sorted_events
     )

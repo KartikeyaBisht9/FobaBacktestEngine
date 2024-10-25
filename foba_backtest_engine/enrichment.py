@@ -64,31 +64,43 @@ by calling joined_enrichments
 
 """
 
-
-
-from collections import defaultdict, namedtuple
-from functools import partial
-from inspect import signature, Parameter
-from warnings import warn
-import time
-import datetime
-import pickle
-import os
-import pandas as pd
-from collections import deque
-from foba_backtest_engine.utils.base_utils import ImmutableDict, get_logger, ImmutableRecord
 import copy
+import datetime
+import os
+import pickle
+import time
+from collections import defaultdict, deque, namedtuple
+from functools import partial
+from inspect import Parameter, signature
+from warnings import warn
 
+import pandas as pd
+
+from foba_backtest_engine.utils.base_utils import (
+    ImmutableDict,
+    ImmutableRecord,
+    get_logger,
+)
 
 logger = get_logger(__name__)
 
 
 class Enrichment:
-    def __init__(self, processors, configuration, auto_persist_on_fail=False, test_mode=False, test_processor=None,
-                 test_name=None, persist_dropped=False, auto_cleanup_resources=False, keep_resources_on_disk=False,
-                 on_disk_location='/data/tmp/foba/', processor_resource_look_forward=3):
-        """Run the enrichment with the given processors and configuration.
-        """
+    def __init__(
+        self,
+        processors,
+        configuration,
+        auto_persist_on_fail=False,
+        test_mode=False,
+        test_processor=None,
+        test_name=None,
+        persist_dropped=False,
+        auto_cleanup_resources=False,
+        keep_resources_on_disk=False,
+        on_disk_location="/data/tmp/foba/",
+        processor_resource_look_forward=3,
+    ):
+        """Run the enrichment with the given processors and configuration."""
         self.resources = dict()
         self.configuration = configuration.copy()
         self.enrichments = defaultdict(list)
@@ -119,15 +131,17 @@ class Enrichment:
                 start = time.time()
                 self._process(processor)
                 end = time.time()
-                profile_dict[processor.__name__] = {'TimeTaken': end - start}
-            print(pd.DataFrame(profile_dict).T.sort_values('TimeTaken', ascending=False))
+                profile_dict[processor.__name__] = {"TimeTaken": end - start}
+            print(
+                pd.DataFrame(profile_dict).T.sort_values("TimeTaken", ascending=False)
+            )
 
     def run_test_mode(self, test_name, test_processor, processors):
         if test_processor and test_name:
             resources_from_file = self._load_persited_resources(test_name)
             self.resources.update(resources_from_file)
-            pre_test_processors = processors[:processors.index(test_processor)]
-            post_test_processors = processors[processors.index(test_processor):]
+            pre_test_processors = processors[: processors.index(test_processor)]
+            post_test_processors = processors[processors.index(test_processor) :]
             if not resources_from_file:
                 for processor in pre_test_processors:
                     self._process(processor)
@@ -135,7 +149,7 @@ class Enrichment:
             else:
                 for processor in pre_test_processors:
                     provides = processor._provides
-                    enriches = getattr(processor, '_enriches', None)
+                    enriches = getattr(processor, "_enriches", None)
                     for provide in provides:
                         if enriches:
                             output = self.resources[provide]
@@ -144,7 +158,7 @@ class Enrichment:
             for processor in post_test_processors:
                 self._process(processor)
         else:
-            raise ValueError('Cannot run in test_mode without test_processor')
+            raise ValueError("Cannot run in test_mode without test_processor")
 
     def check_processors_requirements(self, processors, configuration):
         provided = self.accumulate_and_check_provides(processors, configuration)
@@ -153,9 +167,9 @@ class Enrichment:
 
         for process, provide, require in zip(processors, provided, required):
             expired_provides = provide.difference(require)
-            if hasattr(process, '__name__'):
+            if hasattr(process, "__name__"):
                 self.expired_resources[process.__name__] = expired_provides - config
-                self.expired_resources[process.__name__] -= set(['foba_events'])
+                self.expired_resources[process.__name__] -= set(["foba_events"])
 
     def accumulate_in_memory_processors(self, processors, configuration):
         current_enrichers = {}
@@ -172,15 +186,19 @@ class Enrichment:
 
             for resource in to_delete:
                 del current_enrichers[resource]
-            self.required_memory_resources[process.__name__] = set(current_enrichers.keys())
+            self.required_memory_resources[process.__name__] = set(
+                current_enrichers.keys()
+            )
 
     def accumulate_required_enriches(self, processors):
         required_enriches = set()
         still_required = []
         for processor in reversed(processors):
             if not isinstance(processor, DeleteResources):
-                required_enriches.update(set(parameter.name for parameter in processor._requires.values()))
-                if hasattr(processor, '_enriches'):
+                required_enriches.update(
+                    set(parameter.name for parameter in processor._requires.values())
+                )
+                if hasattr(processor, "_enriches"):
                     required_enriches.add(processor._enriches)
             still_required.append(copy.deepcopy(required_enriches))
         still_required.reverse()
@@ -197,34 +215,45 @@ class Enrichment:
                 # required_args = set(parameter.name for parameter in processor._requires.values()
                 #                     if parameter.default is Parameter.empty
                 #                     and parameter.name is not 'kwargs')
-                required_args = set(parameter.name for parameter in processor._requires.values()
-                                    if parameter.default is Parameter.empty
-                                    and parameter.name != 'kwargs')
+                required_args = set(
+                    parameter.name
+                    for parameter in processor._requires.values()
+                    if parameter.default is Parameter.empty
+                    and parameter.name != "kwargs"
+                )
                 provided.update(processor._provides)
                 if not provided.issuperset(required_args):
-                    raise ValueError('Processor {} does not have required resource {}. Check whether providing process ' \
-                                     'exists or if resource has been deleted'.format(processor.__name__,
-                                                                                     required_args - provided))
+                    raise ValueError(
+                        f"Processor {processor.__name__} does not have required resource {required_args - provided}. Check whether providing process "
+                        "exists or if resource has been deleted"
+                    )
             provided_since_start.append(copy.deepcopy(provided))
         return provided_since_start
 
     def auto_remove_processes_from_memory(self, processor):
-        not_required = set(self.resources.keys()) - self.required_memory_resources[processor.__name__]
+        not_required = (
+            set(self.resources.keys())
+            - self.required_memory_resources[processor.__name__]
+        )
         not_required -= set(self.configuration.keys())
         for name in not_required:
-            logger.debug('Deleting resource from memory: {name}'.format(name=name))
+            logger.debug(f"Deleting resource from memory: {name}")
             del self.resources[name]
 
     def _process(self, processor):
         if self.auto_cleanup_resources:
-            if hasattr(processor, '__name__'):
+            if hasattr(processor, "__name__"):
                 self._delete(self.expired_resources[processor.__name__])
                 if self.keep_resources_on_disk:
                     self.auto_remove_processes_from_memory(processor)
         else:
-            if hasattr(processor, '__name__') and self.expired_resources[processor.__name__]:
-                logger.debug('Could auto-cleanup the following resources {}. Consider enabling as kwarg in enricher'
-                             .format(self.expired_resources[processor.__name__]))
+            if (
+                hasattr(processor, "__name__")
+                and self.expired_resources[processor.__name__]
+            ):
+                logger.debug(
+                    f"Could auto-cleanup the following resources {self.expired_resources[processor.__name__]}. Consider enabling as kwarg in enricher"
+                )
             if isinstance(processor, DeleteResources):
                 self._delete(processor.resource_names)
                 return
@@ -234,20 +263,19 @@ class Enrichment:
 
         kwargs = dict(self._processor_kwargs(processor))
 
-        enriches = getattr(processor, '_enriches', None)
+        enriches = getattr(processor, "_enriches", None)
         if enriches:
             _check_enricher_parameters(processor, kwargs)
 
         processor_name = processor.__name__
-        logger.debug('Running processor: ' + processor_name)
+        logger.debug("Running processor: " + processor_name)
         try:
             output = processor(**kwargs)
         except:
             if self.auto_persist:
                 self._persist_on_failure(processor)
             raise
-        logger.debug('{processor} produced {num_results} results'
-                     .format(processor=processor_name, num_results=len(output)))
+        logger.debug(f"{processor_name} produced {len(output)} results")
 
         for name in provides:
             if self.keep_resources_on_disk:
@@ -263,11 +291,11 @@ class Enrichment:
     def _delete(self, resource_names):
         for name in resource_names:
             if name in self.resources:
-                logger.debug('Deleting resource from memory: {name}'.format(name=name))
+                logger.debug(f"Deleting resource from memory: {name}")
                 del self.resources[name]
             if self.keep_resources_on_disk:
                 if os.path.exists(self.on_disk_location + name):
-                    logger.debug('Deleting resource from disk: {name}'.format(name=name))
+                    logger.debug(f"Deleting resource from disk: {name}")
                     os.remove(self.on_disk_location + name)
 
     def _record_enrichment(self, provides, enriches, output):
@@ -287,14 +315,16 @@ class Enrichment:
             try:
                 if parameter.name in self.configuration:
                     resource = self.configuration[parameter.name]
-                elif self.keep_resources_on_disk and not (parameter.name in self.resources):
+                elif (
+                    self.keep_resources_on_disk and parameter.name not in self.resources
+                ):
                     self.resources[parameter.name] = self.load_resource(parameter.name)
                     resource = self.resources[parameter.name]
                 else:
                     resource = self.resources[parameter.name]
             except KeyError:
                 if parameter.default is Parameter.empty:
-                    print('raised again')
+                    print("raised again")
                     raise
                 resource = parameter.default
             yield parameter.name, resource
@@ -302,12 +332,15 @@ class Enrichment:
     def _check_duplicate_providers(self, provides):
         for name in provides:
             if name in self.resources:
-                raise Exception(('Same resource {name!r} provided by multiple processors;' +
-                                 ' second processor provides {provides}').format(name=name, provides=provides))
+                raise Exception(
+                    (
+                        "Same resource {name!r} provided by multiple processors;"
+                        + " second processor provides {provides}"
+                    ).format(name=name, provides=provides)
+                )
 
     def joined_enrichments(self, name):
-        """Yield namedtuples, containing the loaded data with the given resource and all of its enrichments.
-        """
+        """Yield namedtuples, containing the loaded data with the given resource and all of its enrichments."""
         all_event_dicts = self._joined_dicts(name)
         first_event_dict = next(all_event_dicts)
 
@@ -337,8 +370,9 @@ class Enrichment:
 
         num_missing_events = len(resources) - len(common_ids)
         if num_missing_events != 0:
-            warn('dropping {num_missing_events} events because they are missing enrichments'
-                 .format(num_missing_events=num_missing_events))
+            warn(
+                f"dropping {num_missing_events} events because they are missing enrichments"
+            )
 
         for event_id in common_ids:
             event_dict = resources[event_id]._asdict()
@@ -347,44 +381,44 @@ class Enrichment:
             yield event_dict
 
     def _persist_on_failure(self, processor):
-        name = 'failed_run_{}_{}'.format(processor.__name__, datetime.date.today())
+        name = f"failed_run_{processor.__name__}_{datetime.date.today()}"
         self._persist_required_resources(name)
 
     def _persist_required_resources(self, test_name):
-        persist_resources ={}
+        persist_resources = {}
         for key, value in self.resources.items():
             try:
-                with open('tmp', 'wb') as file:
+                with open("tmp", "wb") as file:
                     pickle.dump(value, file)
                 persist_resources[key] = value
             except AttributeError:
                 continue
-        with open(Enrichment._persist_path(test_name), 'wb') as file:
+        with open(Enrichment._persist_path(test_name), "wb") as file:
             pickle.dump(persist_resources, file)
 
     @staticmethod
     def _load_persited_resources(test_name):
         if os.path.isfile(Enrichment._persist_path(test_name)):
-            logger.debug('Retrieving saved provides from file')
-            with open(Enrichment._persist_path(test_name), 'rb') as file:
+            logger.debug("Retrieving saved provides from file")
+            with open(Enrichment._persist_path(test_name), "rb") as file:
                 provides = pickle.load(file)
             return provides
         else:
-            logger.debug('No file {}. Running all processors'.format(test_name))
+            logger.debug(f"No file {test_name}. Running all processors")
             return {}
 
     @staticmethod
     def _persist_path(test_name):
-        return '{}_persisted_provides.pckl'.format(test_name)
+        return f"{test_name}_persisted_provides.pckl"
 
     def persist_dropped_events(self, events):
-        with open('dropped_events_{}'.format(datetime.date.today()), 'wb') as file:
-            pickle.dump({'events':events, 'enrichments':self.enrichments}, file)
+        with open(f"dropped_events_{datetime.date.today()}", "wb") as file:
+            pickle.dump({"events": events, "enrichments": self.enrichments}, file)
 
     def load_resource(self, resource_name):
         if os.path.exists(self.on_disk_location + resource_name):
-            logger.debug('Loading {} from file'.format(resource_name))
-            with open(self.on_disk_location +resource_name, 'rb') as file:
+            logger.debug(f"Loading {resource_name} from file")
+            with open(self.on_disk_location + resource_name, "rb") as file:
                 resource = pickle.load(file)
         else:
             raise KeyError
@@ -393,25 +427,27 @@ class Enrichment:
     def save_resource_to_disk(self, resource, resource_name):
         if not os.path.isdir(self.on_disk_location):
             os.makedirs(self.on_disk_location, exist_ok=True)
-        logger.debug('Saving {} to file'.format(resource_name))
-        with open(self.on_disk_location + resource_name, 'wb') as file:
-            pickle.dump(resource,file)
+        logger.debug(f"Saving {resource_name} to file")
+        with open(self.on_disk_location + resource_name, "wb") as file:
+            pickle.dump(resource, file)
+
 
 def _check_enricher_parameters(processor, kwargs):
     if processor._enriches not in kwargs:
-        raise Exception('Processor {processor} claims to enrich {enriches} but that is not a parameter'
-                        .format(processor=processor, enriches=processor._enriches))
+        raise Exception(
+            f"Processor {processor} claims to enrich {processor._enriches} but that is not a parameter"
+        )
 
 
 def _camel_case(snake_case):
-    return ''.join(_camel_case_characters(snake_case))
+    return "".join(_camel_case_characters(snake_case))
 
 
 def _camel_case_characters(snake_case):
     snake_case = iter(snake_case)
     yield next(snake_case).upper()
     for character in snake_case:
-        if character == '_':
+        if character == "_":
             yield next(snake_case).upper()
         else:
             yield character
@@ -424,37 +460,41 @@ def provides(*names):
 
     The function is modified in place.
     """
+
     def wrapper(function):
         function._provides = names
         function._requires = dict(signature(function).parameters)
         return function
+
     return wrapper
 
 
 def enriches(name):
-    """Mark a callable as enriching a resource with the given name.
-    """
+    """Mark a callable as enriching a resource with the given name."""
+
     def wrapper(function):
         function._enriches = name
         return function
+
     return wrapper
 
 
 def configure(processor, **kwargs):
-    """Configure the processor with the given keyword arguments.
-    """
+    """Configure the processor with the given keyword arguments."""
     configured_function = partial(processor, **kwargs)
     configured_function.__name__ = processor.__name__
     configured_function._provides = processor._provides
-    configured_function._requires = {key: value for key, value in processor._requires.items() if key not in kwargs}
+    configured_function._requires = {
+        key: value for key, value in processor._requires.items() if key not in kwargs
+    }
 
-    if hasattr(processor, '_enriches'):
+    if hasattr(processor, "_enriches"):
         configured_function._enriches = processor._enriches
 
     return configured_function
 
 
-DeleteResources = namedtuple('DeleteResources', 'resource_names')
+DeleteResources = namedtuple("DeleteResources", "resource_names")
 
 
 def delete_resources(*names):
@@ -462,6 +502,5 @@ def delete_resources(*names):
 
 
 def id_dict(iterable):
-    """Create a unique id for each element in the iterable, and return an ImmutableDict mapping each id to the element.
-    """
+    """Create a unique id for each element in the iterable, and return an ImmutableDict mapping each id to the element."""
     return ImmutableDict((id(x), x) for x in iterable)

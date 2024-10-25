@@ -1,7 +1,7 @@
+import bisect
+import itertools
 import operator
 from collections import deque
-import itertools
-import bisect
 
 """
 LEVELS
@@ -9,6 +9,7 @@ LEVELS
 - last_dones = all trades on that level     ||  pulls = list of orders at this price level that were deleted
 - The volume aggressively executed when joining/creating this evel
 """
+
 
 class Level:
     def __init__(self, initializing_order):
@@ -61,7 +62,7 @@ class Level:
                 o.count_behind -= 1
 
         if index != len(self.orders) + 1:
-            for o in self.orders[index + 1:]:
+            for o in self.orders[index + 1 :]:
                 o.volume_ahead -= order.volume
                 o.count_ahead -= 1
 
@@ -76,7 +77,7 @@ class Level:
                 o.volume_behind -= volume_to_remove
 
         if index != len(self.orders) + 1:
-            for o in self.orders[index + 1:]:
+            for o in self.orders[index + 1 :]:
                 o.volume_ahead -= volume_to_remove
 
     def close_level(self, closing_message):
@@ -101,6 +102,7 @@ This class manages multiple Level objects - it keeps track of the levels, organi
 - unknowns = as matching is fuzzy ... this is our error log
 
 """
+
 
 class LevelManager:
     def __init__(self, is_bid):
@@ -158,21 +160,27 @@ class LevelManager:
         else:
             self._initialize_level(order)
             if order.price is not None:
-                if len(self.ordered_prices) == 0 or self._better(order.price, self.ordered_prices[0]):
+                if len(self.ordered_prices) == 0 or self._better(
+                    order.price, self.ordered_prices[0]
+                ):
                     self.ordered_prices.appendleft(order.price)
                     self.best_price = self.ordered_prices[0]
                 else:
                     self._sorted_prices_append_middle(order.price)
 
     def process_delete_message(self, message, orders, implied_price=False):
-        price = orders[message.order_number].price if not implied_price else implied_price
+        price = (
+            orders[message.order_number].price if not implied_price else implied_price
+        )
         my_level = self.open_levels[price]
         my_level.remove_order_from_level(orders[message.order_number])
         if len(my_level.orders) == 0:
             self._close_levels(my_level, message)
             if price == self.ordered_prices[0]:
                 self.ordered_prices.popleft()
-                self.best_price = None if len(self.ordered_prices) == 0 else self.ordered_prices[0]
+                self.best_price = (
+                    None if len(self.ordered_prices) == 0 else self.ordered_prices[0]
+                )
             else:
                 self._sorted_prices_pop_middle(price)
 
@@ -206,7 +214,7 @@ class LevelManager:
         num_empty = num - len(prices)
 
         return list(zip(prices, volumes)) + [(None, None)] * num_empty
-    
+
     def get_orders_on_non_empty_levels(self, num):
         prices = list(itertools.islice(self.ordered_prices, 0, num))
         orders = [self.open_levels[p].orders for p in prices]
@@ -229,14 +237,17 @@ class LevelManager:
         return list(zip(count, largest_order)) + [(None, None)] * num_empty
 
     def get_distance(self, price):
-        if price is None \
-                or not self.ordered_prices \
-                or self._better(price, self.ordered_prices[0]):
+        if (
+            price is None
+            or not self.ordered_prices
+            or self._better(price, self.ordered_prices[0])
+        ):
             return -1
         else:
             num_in_front = 0
-            while len(self.ordered_prices) > num_in_front \
-                    and self._better(self.ordered_prices[num_in_front], price):
+            while len(self.ordered_prices) > num_in_front and self._better(
+                self.ordered_prices[num_in_front], price
+            ):
                 num_in_front += 1
             return num_in_front
 
@@ -245,8 +256,11 @@ class LevelManager:
             return None
         else:
             try:
-                return next(self.open_levels[level_price] for level_price in self.ordered_prices
-                            if self._worse(level_price, price))
+                return next(
+                    self.open_levels[level_price]
+                    for level_price in self.ordered_prices
+                    if self._worse(level_price, price)
+                )
             except StopIteration:
                 return None
 
@@ -261,11 +275,19 @@ class LevelManager:
             for o in self.open_levels[self.ordered_prices[0]].orders:
                 o.best_level_times[-1][-1] = order.created
 
-    def update_order_best_level_times_for_delete(self, message, orders, implied_price=False):
-        price = orders[message.order_number].price if not implied_price else implied_price
+    def update_order_best_level_times_for_delete(
+        self, message, orders, implied_price=False
+    ):
+        price = (
+            orders[message.order_number].price if not implied_price else implied_price
+        )
 
         if price == self.best_price:
             orders[message.order_number].best_level_times[-1][-1] = message.created
-            if len(self.open_levels[price].orders) == 1 and len(self.ordered_prices) > 1 and not message.volume:
+            if (
+                len(self.open_levels[price].orders) == 1
+                and len(self.ordered_prices) > 1
+                and not message.volume
+            ):
                 for o in self.open_levels[self.ordered_prices[1]].orders:
                     o.best_level_times.append([message.created, None])

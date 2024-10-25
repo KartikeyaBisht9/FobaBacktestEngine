@@ -1,6 +1,7 @@
-import arrow
 import datetime
-from datetime import timedelta as Timedelta
+
+import arrow
+
 # import pandas_market_calendars as mcal
 
 NANOS_IN_SECOND = int(1e9)
@@ -51,18 +52,23 @@ MILLIS_IN_SECOND = int(1e3)
 #             test_dates.pop()
 #     return found_date
 
-def start_end_time(start_hour, 
-                   start_minute, 
-                   end_hour, 
-                   end_minute, 
-                   days_ago=0, 
-                   time_zone=None, 
-                   skip_weekend=False,
-                   end_date=None):
+
+def start_end_time(
+    start_hour,
+    start_minute,
+    end_hour,
+    end_minute,
+    days_ago=0,
+    time_zone=None,
+    skip_weekend=False,
+    end_date=None,
+):
     if end_date:
         now = arrow.get(end_date, time_zone).replace(second=0, microsecond=0)
     else:
-        now = arrow.now(time_zone).replace(second=0, microsecond=0).shift(days=-days_ago)
+        now = (
+            arrow.now(time_zone).replace(second=0, microsecond=0).shift(days=-days_ago)
+        )
     start_time = now.replace(hour=start_hour, minute=start_minute)
     end_time = now.replace(hour=end_hour, minute=end_minute)
     if end_time < start_time:
@@ -75,6 +81,7 @@ def start_end_time(start_hour,
             end_time = end_time.replace(days=-days_past_friday)
 
     return start_time, end_time
+
 
 def to_nano_timestamp(arrow_time):
     try:
@@ -89,18 +96,31 @@ def to_milli_timestamp(arrow_time):
     except TypeError:
         return arrow_time.int_timestamp * MILLIS_IN_SECOND
 
+
 def _convert_unix_to_datetime(unix_time, time_zone=None):
-    return datetime.datetime.fromtimestamp(unix_time / 1e9, tz=time_zone).replace(tzinfo=None)
+    return datetime.datetime.fromtimestamp(unix_time / 1e9, tz=time_zone).replace(
+        tzinfo=None
+    )
 
 
 def _convert_unix_to_ftime(unix_time, time_zone=None):
-    return _convert_unix_to_datetime(unix_time, time_zone=time_zone).strftime('%H:%M:%S') + "." + str(unix_time)[-9:]
+    return (
+        _convert_unix_to_datetime(unix_time, time_zone=time_zone).strftime("%H:%M:%S")
+        + "."
+        + str(unix_time)[-9:]
+    )
 
 
 def _convert_unix_to_fdate(unix_time, time_zone=None):
-    return _convert_unix_to_datetime(unix_time, time_zone=time_zone).strftime('%Y-%m-%d')
+    return _convert_unix_to_datetime(unix_time, time_zone=time_zone).strftime(
+        "%Y-%m-%d"
+    )
+
 
 def _time_from_start_of_day_in_seconds(unix_time, time_zone=None):
-    return (datetime.datetime.fromtimestamp(unix_time / 1e9, tz=time_zone) -
-            datetime.datetime.fromtimestamp(unix_time / 1e9, tz=time_zone).replace(
-                    hour=0, minute=0, second=0, microsecond=0)).total_seconds()
+    return (
+        datetime.datetime.fromtimestamp(unix_time / 1e9, tz=time_zone)
+        - datetime.datetime.fromtimestamp(unix_time / 1e9, tz=time_zone).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+    ).total_seconds()

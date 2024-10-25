@@ -1,9 +1,9 @@
-from foba_backtest_engine.components.order_book.utils.foba_own_orders import get_FAK_orders, get_competitor_FAKS
-from foba_backtest_engine.data.S3.S3OptiverResearchActions import OPTIVER_BUCKET_ACTIONS
-from foba_backtest_engine.components.order_book.utils import enums
 from collections import namedtuple
+
 import numpy as np
 import pandas as pd
+
+from foba_backtest_engine.components.order_book.utils import enums
 
 """
 -------------------
@@ -38,96 +38,77 @@ Expected broker queue is explained in foba_backtest_engine.components.orderbook.
 
 """
 
-FeedUpdate = namedtuple('FeedUpdate', (
-    'received',
-    'created',
-    'timestamp',
-    'command',
-    'side',
-    'book',
-    'order_number',
-    'change_reason',
-    'price',
-    'volume',
-    'inferred',
-    'aggressor_order_number',
-    'sequence_number',
-))
+FeedUpdate = namedtuple(
+    "FeedUpdate",
+    (
+        "received",
+        "created",
+        "timestamp",
+        "command",
+        "side",
+        "book",
+        "order_number",
+        "change_reason",
+        "price",
+        "volume",
+        "inferred",
+        "aggressor_order_number",
+        "sequence_number",
+    ),
+)
+
 
 def db_to_feed_update(row, exchange):
     if exchange == enums.Exchange.OMDC:
-        trade_class = lambda x : x
+        trade_class = lambda x: x
     else:
         raise ValueError("Valid exchanges are OMDC ")
 
     return FeedUpdate(
-        received=row['received_'],
-        created=row['createdNanos_'],
-        timestamp=row['timestampNanos_'],
-        command=enums.Command(row['class_']),
-        side=enums.Side(row['side_']),
-        book=row['securityCode_'],
-        order_number=row['orderId_'],
-        change_reason=trade_class(row['changeReason_']),
-        price=row['price_'],
-        volume=row['volume_'],
-        inferred=row['end_'],
-        # aggressor_order_number=competitor_FAKs[row["orderId_"]] if row["orderId_"] in competitor_FAKs else None,
-        aggressor_order_number = np.nan,
-        sequence_number=row['sequenceNumber_'],
+        received=row["received_"],
+        created=row["createdNanos_"],
+        timestamp=row["timestampNanos_"],
+        command=enums.Command(row["class_"]),
+        side=enums.Side(row["side_"]),
+        book=row["securityCode_"],
+        order_number=row["orderId_"],
+        change_reason=trade_class(row["changeReason_"]),
+        price=row["price_"],
+        volume=row["volume_"],
+        inferred=row["end_"],
+        aggressor_order_number=row["aggressorId_"],
+        sequence_number=row["sequenceNumber_"],
     )
+
 
 def get_feed_updates(exchange, filter=None):
     table_class_map = {
-        'add_order': 0,
-        'update_order': 1,
-        'delete_order': 2,
-        'clear_book': 3
+        "add_order": 0,
+        "update_order": 1,
+        "delete_order": 2,
+        "clear_book": 3,
     }
     table_map = {
-        'add_order': 'AddOrder',
-        'update_order': 'ModifyOrder',
-        'delete_order': 'DeleteOrder',
-        'clear_book': 'ClearOrder'
+        "add_order": "AddOrder",
+        "update_order": "ModifyOrder",
+        "delete_order": "DeleteOrder",
+        "clear_book": "ClearOrder",
     }
 
-    dataframes = []
-    for data_type in list(table_class_map.keys()):
-        if exchange == enums.Exchange.OMDC:
-            exchangeStr = "OMDC"
-        else:
-            raise ValueError(f"Exchange not supported {exchange}")
-
-        # S3path = f"{exchangeStr}/{table_map[data_type]}/{str(filter.start_time.date())}.feather"
-        # df = OPTIVER_BUCKET_ACTIONS.get_feather(path=S3path)
-        if data_type == "add_order":
-            df = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/add.feather")
-        elif data_type =="update_order":
-            df = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/update.feather")
-        elif data_type == "delete_order":
-            df = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/delete.feather")
-        elif data_type == "clear_book":
-            df = pd.read_feather("/Users/kartikeyabisht/FobaBacktestEngine/temp_data/clear.feather")
-        else:
-            raise ValueError("wtf")
-
-
-        df=df[df["securityCode_"].isin(filter.book_ids)].reset_index(drop = True)
-        df["securityCode_"] = df["securityCode_"].apply(lambda x: str(x))
-        table_code = table_class_map[data_type]
-        dataframes.append(df.assign(class_=table_code))
+    dataframe = pd.read_parquet(filter.order_book_path)
+    dataframe = dataframe[dataframe['securityCode_'].isin(filter.book_ids)]
     
-    dataframe = pd.concat(dataframes, ignore_index=True)
-    data_as_dict = dataframe.sort_values(['createdNanos_', 'class_'], ascending=[True, False]).replace(
-        {np.nan: None}).to_dict(orient='records')
+    data_as_dict = (
+        dataframe.sort_values(["createdNanos_", "class_"], ascending=[True, False])
+        .replace({np.nan: None})
+        .to_dict(orient="records")
+    )
     for item in data_as_dict:
-        if item['orderId_']:
-            item['orderId_'] = int(item['orderId_'])
+        if item["orderId_"]:
+            item["orderId_"] = int(item["orderId_"])
 
     result = list(map(lambda fu: db_to_feed_update(fu, exchange), data_as_dict))
     del dataframe
-    del df
     del data_as_dict
 
     return result
-
