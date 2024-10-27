@@ -41,7 +41,7 @@ def extract_foba_events(
 
         if not exclude_pulls:
             for pull_event in builder.pulls:
-                if start_time_ns < trade_event.trade_received < end_time_ns:
+                if start_time_ns < pull_event.trade_received < end_time_ns:
                     pull_order_number = int(str(pull_event.order_number).split("_")[0])
                     if include_only_optiver_pulls:
                         if pull_order_number in optiver_order_numbers:
@@ -52,6 +52,7 @@ def extract_foba_events(
         if not exclude_inplace_updates:
             for event in builder.inplace_updates:
                 events.append(event)
+
     logger.info(f"Total FOBA events = {len(events)}")
     sorted_events = sorted(events, key=lambda x:x.trade_received)
     del events

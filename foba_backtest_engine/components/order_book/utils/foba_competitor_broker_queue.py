@@ -450,41 +450,34 @@ COMPETITOR ENRICHMENT
 @provides("passive_enrichment")
 @enriches("foba_events")
 def competitor_enrichment(
-    foba_events, order_num_to_broker_num, broker_number_to_broker_name, optiver_trades
+    foba_events, order_num_to_broker_num, broker_number_to_broker_name, optiver_hit_or_quote
 ):
-    optiver_order_to_broker = {}
-    if optiver_trades:
-        optiver_quotes = multi_dict(
-            [x for x in optiver_trades.values() if x.optiver_hit == False],
-            key=lambda x: (x.bookId_, x.orderId_, abs(x.price * x.volume)),
-        )
+    improved_order_to_broker = {}
 
+    if optiver_hit_or_quote:
         for event_id, event in foba_events.items():
-            bookId, order_number, notional = (
-                event.book_id,
-                event.order_number,
-                abs(event.event_price * event.event_volume),
-            )
-            opti_trades = optiver_quotes[(bookId, order_number, notional)]
-            if len(opti_trades) > 0:
-                received = [t.received_ for t in opti_trades]
-                index = received.index(
-                    min(received, key=lambda x: abs(x - event.event_driver_received))
-                )
-                broker = int(opti_trades[index].optiverBrokerId_)
+            trade = optiver_hit_or_quote[event_id]
+            if trade.optiver_trade:
+                if trade.optiver_hit:
+                    broker = int(trade.counterparty_broker_code)
+                    if event.book_id not in improved_order_to_broker:
+                        improved_order_to_broker[event.book_id] = {}
+                    improved_order_to_broker[event.book_id][event.order_number] = broker
+                else:
+                    broker = int(trade.optiver_broker_id)
+                    if event.book_id not in improved_order_to_broker:
+                        improved_order_to_broker[event.book_id] = {}
+                    improved_order_to_broker[event.book_id][event.order_number] = broker
             else:
-                broker = -1
-
-            if event.book_id not in optiver_order_to_broker:
-                optiver_order_to_broker[event.book_id] = {}
-
-            optiver_order_to_broker[event.book_id][order_number] = broker
+                if event.book_id not in improved_order_to_broker:
+                    improved_order_to_broker[event.book_id] = {}
+                improved_order_to_broker[event.book_id][event.order_number] = -1
 
     improved_order_number_to_broker = dict(order_num_to_broker_num)
     for k, v in improved_order_number_to_broker.items():
         for on, bn in v.items():
-            if on in optiver_order_to_broker:
-                new_bn = optiver_order_to_broker[on]
+            if on in improved_order_to_broker:
+                new_bn = improved_order_to_broker[on]
                 if new_bn == -1:
                     improved_order_number_to_broker[on] = bn
                 else:
@@ -524,14 +517,12 @@ COUNTERPARTY ENRICHMENT
     
 """
 
-
 @provides("aggressive_enrichment")
 @enriches("foba_events")
 def foreign_counterparty_enrichment(
     foba_events, optiver_hit_or_quote, broker_number_to_broker_name
 ):
     aggressor_map = {}
-
     for event_id, event in foba_events.items():
         if event.event_type is EventType.TRADE:
             optiver_trade = optiver_hit_or_quote[event_id]

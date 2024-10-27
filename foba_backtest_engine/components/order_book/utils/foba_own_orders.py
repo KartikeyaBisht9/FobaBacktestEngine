@@ -114,6 +114,7 @@ OptiverTrade = namedtuple(
     (
         "bookId_",
         "orderId_",
+        "aggressorId_",
         "optiver_hit",
         "optiver_trade",
         "optiver_broker_id",
@@ -323,6 +324,7 @@ def order_state_creates(filter, type="list"):
     date_to_inspect, feedcodes = filter.start_time.datetime, filter.book_ids
     feedcodes = [str(x) if isinstance(x, int) else x for x in feedcodes]
     addOrders = get_own_order_data(filter, table_name="order_insert")
+    addOrders = addOrders[addOrders["order_result"]=="Accepted"].sort_values("exchange_order_id").reset_index(drop=True)
     addOrders = addOrders[
         [
             "dd_group_key",
@@ -390,10 +392,6 @@ def order_matches(foba_events, optiver_order_state_creates, feed_states_at_join)
         order_creates = {
             (order.bookId_, order.orderId_): order
             for event_id, order in optiver_order_state_creates.items()
-        }
-        order_ids_to_event_id = {
-            (order.bookId_, order.orderId_): eventId
-            for eventId, order in optiver_order_state_creates.items()
         }
 
         for eventId, event in foba_events.items():
@@ -628,12 +626,8 @@ def optiver_trade_and_quotes(filter, foba_events, optiver_trades, order_delete_m
     hits = {
         (trade.bookId_, trade.orderId_): trade
         for key, trade in optiver_trades.items()
-        if trade.optiver_hit == False
+        if trade.optiver_hit == True
     }
-
-    # TODO: need to add aggressor order info
-
-    # hits = multi_dict([trade for trade in optiver_trades.values() if trade.optiver_hit == True], key=lambda trade : (trade.bookId_, Side.ASK if trade.optiver_side=="Buy" else Side.BID, abs(trade.price * trade.volume)))
 
     pending_deletes = {
         order.orderId_
@@ -645,46 +639,47 @@ def optiver_trade_and_quotes(filter, foba_events, optiver_trades, order_delete_m
         for event_id, event in foba_events.items():
             if event.event_type == EventType.TRADE:
                 quote_key = (event.book_id, event.order_number)
-                # hit_key = (event.book_id, event.side, abs(event.event_price * event.aggressor_volume))
+                hit_key = (event.book_id, event.aggressor_order_number)
+
+                hit, pickoff, add_delete_delay, competitor_speed = (
+                        False,
+                        False,
+                        np.nan,
+                        np.nan,
+                    )
+                if event.order_number in pending_deletes:
+                    pickoff, pending_delete = (
+                        True,
+                        pending_deletes[event.order_number],
+                    )
+                    sentTime, tradeTime, addTime = (
+                        pending_delete.optiver_driver_sent,
+                        optiver_trade.exchange_timestamp,
+                        optiver_trade.add_order_timestamp_,
+                    )
+                    add_delete_delay, competitor_speed = (
+                        sentTime - addTime,
+                        tradeTime - addTime,
+                    )
+
 
                 if quote_key in quotes:
                     """
                     This is an Optiver quote trade
                     """
                     quote_trade = quotes[quote_key]
-                    hit, pickoff, add_delete_delay, competitor_speed = (
-                        False,
-                        False,
-                        np.nan,
-                        np.nan,
-                    )
-                    if event.order_number in pending_deletes:
-                        pickoff, pending_delete = (
-                            True,
-                            pending_deletes[event.order_number],
-                        )
-                        sentTime, tradeTime, addTime = (
-                            pending_delete.optiver_driver_sent,
-                            optiver_trade.exchange_timestamp,
-                            optiver_trade.add_order_timestamp_,
-                        )
-                        add_delete_delay, competitor_speed = (
-                            sentTime - addTime,
-                            tradeTime - addTime,
-                        )
-
+                
                     optiver_trade = OptiverTrade(
                         bookId_=quote_key[0],
                         orderId_=quote_key[1],
+                        aggressorId_=event.aggressor_order_number,
                         optiver_hit=quote_trade.optiver_hit,
                         optiver_trade=True,
                         optiver_broker_id=int(quote_trade.optiverBrokerId_),
                         counterparty_broker_code=int(quote_trade.counterpartyId_),
                         aggressor_add_order_ts=quote_trade.add_order_timestamp_,
                         optiver_price=quote_trade.price,
-                        optiver_side=Side.BID
-                        if quote_trade.optiver_side == "Buy"
-                        else Side.ASK,
+                        optiver_side=Side.BID if quote_trade.optiver_side == "Buy" else Side.ASK,
                         optiver_volume=quote_trade.volume,
                         optiver_exchange_time=quote_trade.exchange_timestamp,
                         optiver_portfolio=quote_trade.portfolio,
@@ -695,35 +690,35 @@ def optiver_trade_and_quotes(filter, foba_events, optiver_trades, order_delete_m
                         received_=quote_trade.received_,
                     )
 
-                elif quote_key in hits:
-                    ## TODO: need a better way to match these up ... currently we are ignoring all FAKs we didnt boov on
+                elif hit_key in hits:
+                    hit_trade = hits[hit_key]
 
                     optiver_trade = OptiverTrade(
-                        bookId_=quote_key[0],
-                        orderId_=quote_key[1],
-                        optiver_hit=quote_trade.optiver_hit,
+                        bookId_=hit_key[0],
+                        orderId_=event.order_number,
+                        aggressorId_=hit_key[1],
+                        optiver_hit=hit_trade.optiver_hit,
                         optiver_trade=True,
-                        optiver_broker_id=int(quote_trade.optiverBrokerId_),
-                        counterparty_broker_code=int(quote_trade.counterpartyId_),
-                        aggressor_add_order_ts=quote_trade.add_order_timestamp_,
-                        optiver_price=quote_trade.price,
-                        optiver_side=Side.BID
-                        if quote_trade.optiver_side == "Buy"
-                        else Side.ASK,
-                        optiver_volume=quote_trade.volume,
-                        optiver_exchange_time=quote_trade.exchange_timestamp,
-                        optiver_portfolio=quote_trade.portfolio,
-                        optiver_AT_name=quote_trade.username,
+                        optiver_broker_id=int(hit_trade.optiverBrokerId_),
+                        counterparty_broker_code=int(hit_trade.counterpartyId_),
+                        aggressor_add_order_ts=hit_trade.add_order_timestamp_,
+                        optiver_price=hit_trade.price,
+                        optiver_side=Side.BID if hit_trade.optiver_side == "Buy" else Side.ASK,
+                        optiver_volume=hit_trade.volume,
+                        optiver_exchange_time=hit_trade.exchange_timestamp,
+                        optiver_portfolio=hit_trade.portfolio,
+                        optiver_AT_name=hit_trade.username,
                         pick_off=pickoff,
                         trigger_response_time=add_delete_delay,
                         competitor_latency=competitor_speed,
-                        received_=quote_trade.received_,
+                        received_=hit_trade.received_,
                     )
 
                 else:
                     optiver_trade = OptiverTrade(
                         bookId_=event.book_id,
                         orderId_=event.order_number,
+                        aggressorId_=event.aggressor_order_number,
                         optiver_hit=False,
                         optiver_trade=False,
                         optiver_broker_id=np.nan,
@@ -745,6 +740,7 @@ def optiver_trade_and_quotes(filter, foba_events, optiver_trades, order_delete_m
                 optiver_trade = OptiverTrade(
                     bookId_=event.book_id,
                     orderId_=event.order_number,
+                    aggressorId_=event.aggressor_order_number,
                     optiver_hit=False,
                     optiver_trade=False,
                     optiver_broker_id=np.nan,

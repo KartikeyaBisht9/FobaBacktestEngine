@@ -99,7 +99,7 @@ def get_feed_updates(exchange, filter=None):
     dataframe = dataframe[dataframe['securityCode_'].isin(filter.book_ids)]
     
     data_as_dict = (
-        dataframe.sort_values(["createdNanos_", "class_"], ascending=[True, False])
+        dataframe.sort_values(["sequenceNumber_", "createdNanos_", "class_"], ascending=[True, True, False])
         .replace({np.nan: None})
         .to_dict(orient="records")
     )
